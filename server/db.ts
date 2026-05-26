@@ -7,13 +7,14 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 
-const MONGODB_URI="mongodb+srv://himanshkumar011:himanshu1234@chatting.xyhke.mongodb.net/?retryWrites=true&w=majority&appName=Chatting"
 // Get current file's path in ESM
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 // Load environment variables from .env file
 dotenv.config({ path: path.resolve(__dirname, '.env') });
+
+const MONGODB_URI = process.env.MONGODB_URI;
 
 if (!MONGODB_URI) {
   throw new Error('Please define the MONGODB_URI environment variable');

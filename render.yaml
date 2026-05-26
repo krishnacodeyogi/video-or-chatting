@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: quicktalk-chat
+    env: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: MONGODB_URI
+        sync: false # You will enter your MongoDB Atlas URI here in the Render dashboard
+      - key: SESSION_SECRET
+        generateValue: true # Render will automatically generate a secure session secret!
