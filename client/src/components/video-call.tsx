@@ -29,8 +29,25 @@ export function VideoCall({
   const { toast } = useToast();
   const socketRef = useRef<Socket | null>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
-  const localVideoRef = useRef<HTMLVideoElement>(null);
-  const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  // Callback refs to robustly bind media streams when conditional elements mount
+  const localVideoCallback = React.useCallback(
+    (el: HTMLVideoElement | null) => {
+      if (el) {
+        el.srcObject = localStream;
+      }
+    },
+    [localStream]
+  );
+
+  const remoteVideoCallback = React.useCallback(
+    (el: HTMLVideoElement | null) => {
+      if (el) {
+        el.srcObject = remoteStream;
+      }
+    },
+    [remoteStream]
+  );
+
   const audioContextRef = useRef<AudioContext | null>(null);
   const ringOscillatorRef = useRef<OscillatorNode | null>(null);
 
@@ -227,9 +244,6 @@ export function VideoCall({
         audio: true,
       });
       setLocalStream(stream);
-      if (localVideoRef.current) {
-        localVideoRef.current.srcObject = stream;
-      }
       return stream;
     } catch (err) {
       toast({
@@ -255,9 +269,6 @@ export function VideoCall({
     pc.ontrack = (event) => {
       if (event.streams && event.streams[0]) {
         setRemoteStream(event.streams[0]);
-        if (remoteVideoRef.current) {
-          remoteVideoRef.current.srcObject = event.streams[0];
-        }
       }
     };
 
@@ -394,18 +405,7 @@ export function VideoCall({
     }
   };
 
-  // Bind video elements on connection
-  useEffect(() => {
-    if (localVideoRef.current && localStream) {
-      localVideoRef.current.srcObject = localStream;
-    }
-  }, [localStream, callState]);
-
-  useEffect(() => {
-    if (remoteVideoRef.current && remoteStream) {
-      remoteVideoRef.current.srcObject = remoteStream;
-    }
-  }, [remoteStream, callState]);
+  // Binding is fully handled reactively via callback refs above
 
   return (
     <>
@@ -451,7 +451,7 @@ export function VideoCall({
                 {/* Local camera preview during calling */}
                 <div className="w-full h-48 rounded-2xl overflow-hidden bg-slate-800 border border-white/10 shadow-inner relative">
                   <video
-                    ref={localVideoRef}
+                    ref={localVideoCallback}
                     autoPlay
                     playsInline
                     muted
@@ -536,7 +536,7 @@ export function VideoCall({
                 {/* Remote Stream (Fullscreen) */}
                 <div className="absolute inset-0 w-full h-full bg-slate-950">
                   <video
-                    ref={remoteVideoRef}
+                    ref={remoteVideoCallback}
                     autoPlay
                     playsInline
                     className="w-full h-full object-cover"
@@ -560,7 +560,7 @@ export function VideoCall({
                   className="absolute top-4 right-4 w-32 md:w-44 h-48 md:h-64 rounded-2xl overflow-hidden border-2 border-white/20 bg-slate-900/80 shadow-2xl z-10 cursor-grab active:cursor-grabbing"
                 >
                   <video
-                    ref={localVideoRef}
+                    ref={localVideoCallback}
                     autoPlay
                     playsInline
                     muted
