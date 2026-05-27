@@ -12,7 +12,7 @@ import { useEffect, useRef, useState } from "react";
 import { Form, FormControl, FormField, FormItem, FormLabel } from "@/components/ui/form";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
-import { LogOut, Send, Circle, Search, Moon, Sun, Trash2, Info, Plus, Users, Video } from "lucide-react";
+import { LogOut, Send, Circle, Search, Moon, Sun, Trash2, Info, Plus, Users, Video, Phone } from "lucide-react";
 import { debounce } from "lodash";
 import { useToast } from "@/hooks/use-toast";
 import { Paperclip, X, Trash, Loader2 } from "lucide-react";
@@ -238,7 +238,7 @@ function CreateGroupDialog({ onCreated }: { onCreated: () => void }) {
   );
 }
 
-function ChatArea({ selectedUser, currentUser, onStartCall }: { selectedUser: User; currentUser: User; onStartCall: () => void }) {
+function ChatArea({ selectedUser, currentUser, onStartCall }: { selectedUser: User; currentUser: User; onStartCall: (type: "video" | "voice") => void }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   const [longPressTimer, setLongPressTimer] = useState<NodeJS.Timeout | null>(null);
@@ -368,12 +368,20 @@ function ChatArea({ selectedUser, currentUser, onStartCall }: { selectedUser: Us
         </div>
         <div className="flex items-center gap-2">
           <Button
-            onClick={onStartCall}
+            onClick={() => onStartCall("video")}
             variant="ghost"
             size="icon"
             className="text-primary hover:bg-primary/10 rounded-full h-10 w-10 transition-transform hover:scale-105"
           >
             <Video className="h-5 w-5" />
+          </Button>
+          <Button
+            onClick={() => onStartCall("voice")}
+            variant="ghost"
+            size="icon"
+            className="text-primary hover:bg-primary/10 rounded-full h-10 w-10 transition-transform hover:scale-105"
+          >
+            <Phone className="h-5 w-5" />
           </Button>
         </div>
       </div>
@@ -766,7 +774,7 @@ export default function HomePage() {
   const [isDark, setIsDark] = useState(window.matchMedia('(prefers-color-scheme: dark)').matches);
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<"chats" | "groups">("chats");
-  const [triggerCall, setTriggerCall] = useState(0);
+  const [triggerCall, setTriggerCall] = useState<{ id: number; type: "video" | "voice" } | null>(null);
 
   useEffect(() => {
     apiRequest("POST", "/api/online");
@@ -959,7 +967,7 @@ export default function HomePage() {
           <ChatArea
             selectedUser={selectedUser}
             currentUser={user!}
-            onStartCall={() => setTriggerCall((prev) => prev + 1)}
+            onStartCall={(type) => setTriggerCall({ id: Date.now(), type })}
           />
         ) : selectedGroup ? (
           <GroupChatArea group={selectedGroup} currentUser={user!} />

@@ -13,25 +13,24 @@ interface VideoCallProps {
   selectedUserId: string | null;
   selectedUsername: string | null;
   onCallActiveChange: (active: boolean) => void;
-  triggerCall?: number;
+  triggerCall?: { id: number; type: "video" | "voice" } | null;
   hideButton?: boolean;
 }
 
 export function VideoCall({
   currentUserId,
   currentUsername,
-  selectedUserId,
   selectedUsername,
   onCallActiveChange,
-  triggerCall = 0,
+  triggerCall = null,
   hideButton = false,
 }: VideoCallProps) {
   const { toast } = useToast();
   const socketRef = useRef<Socket | null>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const pendingCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
-  // States
   const [callState, setCallState] = useState<"idle" | "calling" | "incoming" | "connected">("idle");
+  const [activeCallType, setActiveCallType] = useState<"video" | "voice">("video");
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const [micEnabled, setMicEnabled] = useState(true);
@@ -41,6 +40,7 @@ export function VideoCall({
     from: string;
     offer: any;
     callerName: string;
+    callType: "video" | "voice";
   } | null>(null);
 
   // Callback refs to robustly bind media streams when conditional elements mount
@@ -69,8 +69,8 @@ export function VideoCall({
 
   // Trigger outgoing call when parent signals
   useEffect(() => {
-    if (triggerCall && triggerCall > 0) {
-      initiateCall();
+    if (triggerCall && triggerCall.id > 0) {
+      initiateCall(triggerCall.type);
     }
   }, [triggerCall]);
 
@@ -161,7 +161,7 @@ export function VideoCall({
     });
 
     // Handle Incoming Call
-    socket.on("incoming-call", (data: { from: string; offer: any; callerName: string }) => {
+    socket.on("incoming-call", (data: { from: string; offer: any; callerName: string; callType: "video" | "voice" }) => {
       if (callState !== "idle") {
         // If busy, auto-reject
         socket.emit("reject-call", { to: data.from });
@@ -169,6 +169,7 @@ export function VideoCall({
       }
       
       setIncomingCallData(data);
+      setActiveCallType(data.callType);
       setCallState("incoming");
       onCallActiveChange(true);
       startRingtone(true);
@@ -251,10 +252,10 @@ export function VideoCall({
   }, [currentUserId, callState]);
 
   // Handle local camera and microphone stream
-  const startLocalStream = async () => {
+  const startLocalStream = async (type: "video" | "voice") => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: true,
+        video: type === "video",
         audio: true,
       });
       setLocalStream(stream);
@@ -306,16 +307,17 @@ export function VideoCall({
   };
 
   // Initiate call
-  const initiateCall = async () => {
+  const initiateCall = async (type: "video" | "voice" = "video") => {
     if (!selectedUserId || !selectedUsername) return;
     
     activePeerIdRef.current = selectedUserId;
+    setActiveCallType(type);
     setCallState("calling");
     onCallActiveChange(true);
     startRingtone(false);
 
     try {
-      const stream = await startLocalStream();
+      const stream = await startLocalStream(type);
       const pc = createPeerConnection(selectedUserId, stream);
       
       const offer = await pc.createOffer();
@@ -327,6 +329,7 @@ export function VideoCall({
           offer,
           from: currentUserId,
           callerName: currentUsername,
+          callType: type,
         });
       }
     } catch (e) {
@@ -343,7 +346,7 @@ export function VideoCall({
     activePeerIdRef.current = incomingCallData.from;
 
     try {
-      const stream = await startLocalStream();
+      const stream = await startLocalStream(incomingCallData.callType);
       const pc = createPeerConnection(incomingCallData.from, stream);
       
       await pc.setRemoteDescription(new RTCSessionDescription(incomingCallData.offer));
@@ -443,14 +446,24 @@ export function VideoCall({
     <>
       {/* Idle state trigger button (if a user is selected) */}
       {callState === "idle" && selectedUserId && !hideButton && (
-        <Button
-          onClick={initiateCall}
-          variant="ghost"
-          size="icon"
-          className="text-primary hover:bg-primary/10 rounded-full h-10 w-10 transition-transform hover:scale-105"
-        >
-          <Video className="h-5 w-5" />
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            onClick={() => initiateCall("video")}
+            variant="ghost"
+            size="icon"
+            className="text-primary hover:bg-primary/10 rounded-full h-10 w-10 transition-transform hover:scale-105"
+          >
+            <Video className="h-5 w-5" />
+          </Button>
+          <Button
+            onClick={() => initiateCall("voice")}
+            variant="ghost"
+            size="icon"
+            className="text-primary hover:bg-primary/10 rounded-full h-10 w-10 transition-transform hover:scale-105"
+          >
+            <Phone className="h-5 w-5" />
+          </Button>
+        </div>
       )}
 
       {/* Modern Overlay Panels */}
@@ -481,29 +494,38 @@ export function VideoCall({
                 </div>
 
                 {/* Local camera preview during calling */}
-                <div className="w-full h-48 rounded-2xl overflow-hidden bg-slate-800 border border-white/10 shadow-inner relative">
-                  <video
-                    ref={localVideoCallback}
-                    autoPlay
-                    playsInline
-                    muted
-                    className="w-full h-full object-cover transform -scale-x-100"
-                  />
-                  {!cameraEnabled && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-slate-800">
-                      <VideoOff className="h-8 w-8 text-slate-500" />
-                    </div>
-                  )}
-                </div>
+                {activeCallType === "video" ? (
+                  <div className="w-full h-48 rounded-2xl overflow-hidden bg-slate-800 border border-white/10 shadow-inner relative">
+                    <video
+                      ref={localVideoCallback}
+                      autoPlay
+                      playsInline
+                      muted
+                      className="w-full h-full object-cover transform -scale-x-100"
+                    />
+                    {!cameraEnabled && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-slate-800">
+                        <VideoOff className="h-8 w-8 text-slate-500" />
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="w-full h-48 rounded-2xl flex items-center justify-center bg-slate-800 border border-white/10 shadow-inner relative">
+                    <div className="absolute inset-0 bg-green-500/10 rounded-full animate-ping scale-75"></div>
+                    <Mic className="h-16 w-16 text-green-500 relative z-10" />
+                  </div>
+                )}
 
                 <div className="flex gap-4 mb-8">
-                  <Button
-                    onClick={toggleCamera}
-                    variant="outline"
-                    className={`rounded-full h-14 w-14 p-0 border-white/20 bg-slate-800/80 hover:bg-slate-700/80 text-white ${!cameraEnabled && 'bg-red-500/80 hover:bg-red-600/80'}`}
-                  >
-                    {cameraEnabled ? <Video className="h-6 w-6" /> : <VideoOff className="h-6 w-6" />}
-                  </Button>
+                  {activeCallType === "video" && (
+                    <Button
+                      onClick={toggleCamera}
+                      variant="outline"
+                      className={`rounded-full h-14 w-14 p-0 border-white/20 bg-slate-800/80 hover:bg-slate-700/80 text-white ${!cameraEnabled && 'bg-red-500/80 hover:bg-red-600/80'}`}
+                    >
+                      {cameraEnabled ? <Video className="h-6 w-6" /> : <VideoOff className="h-6 w-6" />}
+                    </Button>
+                  )}
                   <Button
                     onClick={toggleMic}
                     variant="outline"
@@ -537,7 +559,7 @@ export function VideoCall({
                   </Avatar>
                   <h2 className="text-2xl font-bold">{incomingCallData.callerName}</h2>
                   <p className="text-green-400 font-medium animate-pulse flex items-center gap-2">
-                    <Phone className="h-4 w-4 fill-green-400 animate-bounce" /> Incoming Video Call...
+                    <Phone className="h-4 w-4 fill-green-400 animate-bounce" /> Incoming {activeCallType === "video" ? "Video" : "Voice"} Call...
                   </p>
                 </div>
 
@@ -566,54 +588,85 @@ export function VideoCall({
                 className="relative w-full max-w-4xl h-[85vh] bg-black rounded-3xl border border-white/10 overflow-hidden shadow-2xl"
               >
                 {/* Remote Stream (Fullscreen) */}
-                <div className="absolute inset-0 w-full h-full bg-slate-950">
-                  <video
-                    ref={remoteVideoCallback}
-                    autoPlay
-                    playsInline
-                    className="w-full h-full object-cover"
-                  />
-                  {!remoteStream && (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950 gap-4 text-white">
-                      <Avatar className="h-20 w-20 animate-pulse">
-                        <AvatarFallback className="text-2xl">
-                          {selectedUsername?.[0].toUpperCase()}
+                {activeCallType === "video" ? (
+                  <>
+                    <div className="absolute inset-0 w-full h-full bg-slate-950">
+                      <video
+                        ref={remoteVideoCallback}
+                        autoPlay
+                        playsInline
+                        className="w-full h-full object-cover"
+                      />
+                      {!remoteStream && (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950 gap-4 text-white">
+                          <Avatar className="h-20 w-20 animate-pulse">
+                            <AvatarFallback className="text-2xl">
+                              {selectedUsername?.[0].toUpperCase() || incomingCallData?.callerName?.[0].toUpperCase()}
+                            </AvatarFallback>
+                          </Avatar>
+                          <p className="text-slate-400 animate-pulse">Connecting to video feed...</p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Local Stream Preview (Floating PiP window) */}
+                    <motion.div
+                      drag
+                      dragConstraints={{ left: 10, right: 600, top: 10, bottom: 400 }}
+                      className="absolute top-4 right-4 w-32 md:w-44 h-48 md:h-64 rounded-2xl overflow-hidden border-2 border-white/20 bg-slate-900/80 shadow-2xl z-10 cursor-grab active:cursor-grabbing"
+                    >
+                      <video
+                        ref={localVideoCallback}
+                        autoPlay
+                        playsInline
+                        muted
+                        className="w-full h-full object-cover transform -scale-x-100"
+                      />
+                      {!cameraEnabled && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-slate-900 text-white">
+                          <VideoOff className="h-6 w-6 text-slate-500" />
+                        </div>
+                      )}
+                    </motion.div>
+                  </>
+                ) : (
+                  // Voice Call Connected UI
+                  <div className="absolute inset-0 w-full h-full bg-slate-900 flex flex-col items-center justify-center gap-12">
+                    {/* Add audio tag for remote voice stream */}
+                    <audio ref={remoteVideoCallback as any} autoPlay playsInline />
+                    
+                    <div className="relative">
+                      <div className="absolute inset-0 bg-green-500/20 rounded-full animate-ping scale-[1.5]"></div>
+                      <div className="absolute inset-0 bg-green-500/10 rounded-full animate-pulse scale-[2]"></div>
+                      <Avatar className="h-40 w-40 border-4 border-green-500/50 shadow-2xl relative z-10">
+                        <AvatarFallback className="text-6xl bg-slate-800 text-white font-bold">
+                          {selectedUsername?.[0].toUpperCase() || incomingCallData?.callerName?.[0].toUpperCase()}
                         </AvatarFallback>
                       </Avatar>
-                      <p className="text-slate-400 animate-pulse">Connecting to video feed...</p>
                     </div>
-                  )}
-                </div>
-
-                {/* Local Stream Preview (Floating PiP window) */}
-                <motion.div
-                  drag
-                  dragConstraints={{ left: 10, right: 600, top: 10, bottom: 400 }}
-                  className="absolute top-4 right-4 w-32 md:w-44 h-48 md:h-64 rounded-2xl overflow-hidden border-2 border-white/20 bg-slate-900/80 shadow-2xl z-10 cursor-grab active:cursor-grabbing"
-                >
-                  <video
-                    ref={localVideoCallback}
-                    autoPlay
-                    playsInline
-                    muted
-                    className="w-full h-full object-cover transform -scale-x-100"
-                  />
-                  {!cameraEnabled && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-slate-900 text-white">
-                      <VideoOff className="h-6 w-6 text-slate-500" />
+                    <div className="text-center z-10">
+                      <h2 className="text-3xl font-bold text-white mb-2">
+                        {selectedUsername || incomingCallData?.callerName}
+                      </h2>
+                      <div className="flex items-center justify-center gap-2 text-green-400 font-medium text-lg">
+                        <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
+                        Voice Call Connected
+                      </div>
                     </div>
-                  )}
-                </motion.div>
+                  </div>
+                )}
 
                 {/* Floating control bar */}
                 <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center justify-center gap-4 bg-slate-900/70 border border-white/10 px-6 py-3 rounded-full backdrop-blur-lg z-20 shadow-2xl">
-                  <Button
-                    onClick={toggleCamera}
-                    variant="outline"
-                    className={`rounded-full h-12 w-12 p-0 border-white/20 bg-slate-800/80 hover:bg-slate-700/80 text-white ${!cameraEnabled && 'bg-red-500/80 hover:bg-red-600/80'}`}
-                  >
-                    {cameraEnabled ? <Video className="h-5 w-5" /> : <VideoOff className="h-5 w-5" />}
-                  </Button>
+                  {activeCallType === "video" && (
+                    <Button
+                      onClick={toggleCamera}
+                      variant="outline"
+                      className={`rounded-full h-12 w-12 p-0 border-white/20 bg-slate-800/80 hover:bg-slate-700/80 text-white ${!cameraEnabled && 'bg-red-500/80 hover:bg-red-600/80'}`}
+                    >
+                      {cameraEnabled ? <Video className="h-5 w-5" /> : <VideoOff className="h-5 w-5" />}
+                    </Button>
+                  )}
 
                   <Button
                     onClick={toggleMic}
