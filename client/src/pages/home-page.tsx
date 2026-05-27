@@ -185,13 +185,12 @@ function ProfileEditDialog({ user }: { user: User }) {
             onClick={() => !isUploading && fileInputRef.current?.click()}
             className="relative h-24 w-24 rounded-full border-2 border-primary/20 shadow-md cursor-pointer overflow-hidden group transition-transform duration-300 hover:scale-105"
           >
-            {avatarUrl ? (
-              <img src={avatarUrl} alt="Preview" className="h-full w-full object-cover" />
-            ) : (
-              <div className="h-full w-full bg-primary/10 text-primary flex items-center justify-center text-2xl font-bold">
+            <Avatar className="h-full w-full">
+              {avatarUrl && <AvatarImage src={avatarUrl} alt="Preview" className="object-cover" />}
+              <AvatarFallback className="text-2xl font-bold bg-primary/10 text-primary flex items-center justify-center h-full w-full">
                 {user.username[0].toUpperCase()}
-              </div>
-            )}
+              </AvatarFallback>
+            </Avatar>
             
             {/* Hover overlay */}
             <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity duration-300">
