@@ -29,6 +29,20 @@ export function VideoCall({
   const { toast } = useToast();
   const socketRef = useRef<Socket | null>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
+  const pendingCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
+  // States
+  const [callState, setCallState] = useState<"idle" | "calling" | "incoming" | "connected">("idle");
+  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+  const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
+  const [micEnabled, setMicEnabled] = useState(true);
+  const [cameraEnabled, setCameraEnabled] = useState(true);
+  const [speakerEnabled, setSpeakerEnabled] = useState(true);
+  const [incomingCallData, setIncomingCallData] = useState<{
+    from: string;
+    offer: any;
+    callerName: string;
+  } | null>(null);
+
   // Callback refs to robustly bind media streams when conditional elements mount
   const localVideoCallback = React.useCallback(
     (el: HTMLVideoElement | null) => {
@@ -50,19 +64,6 @@ export function VideoCall({
 
   const audioContextRef = useRef<AudioContext | null>(null);
   const ringOscillatorRef = useRef<OscillatorNode | null>(null);
-
-  // States
-  const [callState, setCallState] = useState<"idle" | "calling" | "incoming" | "connected">("idle");
-  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
-  const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
-  const [micEnabled, setMicEnabled] = useState(true);
-  const [cameraEnabled, setCameraEnabled] = useState(true);
-  const [speakerEnabled, setSpeakerEnabled] = useState(true);
-  const [incomingCallData, setIncomingCallData] = useState<{
-    from: string;
-    offer: any;
-    callerName: string;
-  } | null>(null);
 
   const activePeerIdRef = useRef<string | null>(null);
 
@@ -180,6 +181,16 @@ export function VideoCall({
         try {
           await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(data.answer));
           setCallState("connected");
+          
+          // Process queued ICE candidates
+          for (const candidate of pendingCandidatesRef.current) {
+            try {
+              await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(candidate));
+            } catch (e) {
+              console.error("Error adding queued ice candidate:", e);
+            }
+          }
+          pendingCandidatesRef.current = [];
         } catch (e) {
           console.error("Error setting remote description:", e);
           endCall();
@@ -190,10 +201,15 @@ export function VideoCall({
     // Handle ICE Candidate relay
     socket.on("ice-candidate", async (data: { candidate: any }) => {
       if (peerConnectionRef.current) {
-        try {
-          await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(data.candidate));
-        } catch (e) {
-          console.error("Error adding ice candidate:", e);
+        if (peerConnectionRef.current.remoteDescription) {
+          try {
+            await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(data.candidate));
+          } catch (e) {
+            console.error("Error adding ice candidate:", e);
+          }
+        } else {
+          // Queue the candidate until remote description is set
+          pendingCandidatesRef.current.push(data.candidate);
         }
       }
     });
@@ -327,6 +343,17 @@ export function VideoCall({
       const pc = createPeerConnection(incomingCallData.from, stream);
       
       await pc.setRemoteDescription(new RTCSessionDescription(incomingCallData.offer));
+      
+      // Process any queued ICE candidates that arrived before we set the remote description
+      for (const candidate of pendingCandidatesRef.current) {
+        try {
+          await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        } catch (e) {
+          console.error("Error adding queued ice candidate:", e);
+        }
+      }
+      pendingCandidatesRef.current = [];
+
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
 
