@@ -15,7 +15,7 @@ declare global {
 
 const scryptAsync = promisify(scrypt);
 
-async function hashPassword(password: string) {
+export async function hashPassword(password: string) {
   const salt = randomBytes(16).toString("hex");
   const buf = (await scryptAsync(password, salt, 64)) as Buffer;
   return `${buf.toString("hex")}.${salt}`;
@@ -79,7 +79,14 @@ export function setupAuth(app: Express) {
     res.status(200).json(req.user);
   });
 
-  app.post("/api/logout", (req, res, next) => {
+  app.post("/api/logout", async (req, res, next) => {
+    if (req.user) {
+      try {
+        await storage.setUserOnlineStatus(req.user.id, false);
+      } catch (err) {
+        console.error("Error setting offline status on logout:", err);
+      }
+    }
     req.logout((err) => {
       if (err) return next(err);
       res.sendStatus(200);

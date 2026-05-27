@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { setupAuth } from "./auth";
+import { setupAuth, hashPassword } from "./auth";
 import { storage } from "./storage";
 import { insertMessageSchema, insertGroupSchema } from "@shared/schema";
 import { z } from "zod";
@@ -212,6 +212,28 @@ setupAuth(app);
       res.json(user);
     } catch (err) {
       res.status(500).json({ message: "Failed to update user" });
+    }
+  });
+
+  app.post("/api/online", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    try {
+      await storage.setUserOnlineStatus(req.user!.id, true);
+      res.sendStatus(200);
+    } catch (err) {
+      console.error("Error setting online status via API:", err);
+      res.status(500).json({ message: "Failed to set online status" });
+    }
+  });
+
+  app.post("/api/offline", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    try {
+      await storage.setUserOnlineStatus(req.user!.id, false);
+      res.sendStatus(200);
+    } catch (err) {
+      console.error("Error setting offline status via API:", err);
+      res.status(500).json({ message: "Failed to set offline status" });
     }
   });
 

@@ -1,6 +1,7 @@
 import { Server as HttpServer } from "http";
 import { Server as SocketIOServer, Socket } from "socket.io";
 import { log } from "./vite";
+import { storage } from "./storage";
 
 // Map to store active userId -> socketId
 const userSocketMap = new Map<string, string>();
@@ -20,13 +21,19 @@ export function setupSocketIO(server: HttpServer) {
     log(`Socket connected: ${socket.id}`, "socket.io");
 
     // Register user when they join
-    socket.on("join", (userId: string) => {
+    socket.on("join", async (userId: string) => {
       if (!userId) return;
       
       userSocketMap.set(userId, socket.id);
       socketUserMap.set(socket.id, userId);
       
       log(`User registered: ${userId} -> Socket: ${socket.id}`, "socket.io");
+      
+      try {
+        await storage.setUserOnlineStatus(userId, true);
+      } catch (err) {
+        log(`Error setting user online status: ${err}`, "socket.io");
+      }
       
       // Broadcast online status
       io.emit("user-online", userId);
@@ -89,12 +96,18 @@ export function setupSocketIO(server: HttpServer) {
     });
 
     // Handle disconnection
-    socket.on("disconnect", () => {
+    socket.on("disconnect", async () => {
       const userId = socketUserMap.get(socket.id);
       if (userId) {
         userSocketMap.delete(userId);
         socketUserMap.delete(socket.id);
         log(`User disconnected: ${userId} (Socket: ${socket.id})`, "socket.io");
+        
+        try {
+          await storage.setUserOnlineStatus(userId, false);
+        } catch (err) {
+          log(`Error setting user offline status: ${err}`, "socket.io");
+        }
         
         // Broadcast offline status
         io.emit("user-offline", userId);
