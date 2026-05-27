@@ -200,17 +200,15 @@ export function VideoCall({
 
     // Handle ICE Candidate relay
     socket.on("ice-candidate", async (data: { candidate: any }) => {
-      if (peerConnectionRef.current) {
-        if (peerConnectionRef.current.remoteDescription) {
-          try {
-            await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(data.candidate));
-          } catch (e) {
-            console.error("Error adding ice candidate:", e);
-          }
-        } else {
-          // Queue the candidate until remote description is set
-          pendingCandidatesRef.current.push(data.candidate);
+      if (peerConnectionRef.current && peerConnectionRef.current.remoteDescription) {
+        try {
+          await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(data.candidate));
+        } catch (e) {
+          console.error("Error adding ice candidate:", e);
         }
+      } else {
+        // Queue the candidate until remote description is set (even if peer connection is not yet created)
+        pendingCandidatesRef.current.push(data.candidate);
       }
     });
 
@@ -284,7 +282,13 @@ export function VideoCall({
     // Listen for remote tracks
     pc.ontrack = (event) => {
       if (event.streams && event.streams[0]) {
-        setRemoteStream(event.streams[0]);
+        setRemoteStream(new MediaStream(event.streams[0].getTracks()));
+      } else {
+        setRemoteStream((prev) => {
+          const stream = prev || new MediaStream();
+          stream.addTrack(event.track);
+          return new MediaStream(stream.getTracks());
+        });
       }
     };
 
@@ -408,6 +412,7 @@ export function VideoCall({
     setRemoteStream(null);
     setIncomingCallData(null);
     activePeerIdRef.current = null;
+    pendingCandidatesRef.current = [];
     onCallActiveChange(false);
   };
 
