@@ -3,15 +3,17 @@ import { io, Socket } from "socket.io-client";
 import { Phone, PhoneOff, Video, VideoOff, Mic, MicOff, Volume2, VolumeX } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 
 interface VideoCallProps {
   currentUserId: string;
   currentUsername: string;
+  currentUserAvatarUrl: string | null;
   selectedUserId: string | null;
   selectedUsername: string | null;
+  selectedUserAvatarUrl: string | null;
   onCallActiveChange: (active: boolean) => void;
   triggerCall?: { id: number; type: "video" | "voice" } | null;
   hideButton?: boolean;
@@ -20,8 +22,10 @@ interface VideoCallProps {
 export function VideoCall({
   currentUserId,
   currentUsername,
+  currentUserAvatarUrl,
   selectedUserId,
   selectedUsername,
+  selectedUserAvatarUrl,
   onCallActiveChange,
   triggerCall = null,
   hideButton = false,
@@ -41,6 +45,7 @@ export function VideoCall({
     from: string;
     offer: any;
     callerName: string;
+    callerAvatarUrl?: string;
     callType: "video" | "voice";
   } | null>(null);
 
@@ -162,7 +167,7 @@ export function VideoCall({
     });
 
     // Handle Incoming Call
-    socket.on("incoming-call", (data: { from: string; offer: any; callerName: string; callType: "video" | "voice" }) => {
+    socket.on("incoming-call", (data: { from: string; offer: any; callerName: string; callerAvatarUrl?: string; callType: "video" | "voice" }) => {
       if (callState !== "idle") {
         // If busy, auto-reject
         socket.emit("reject-call", { to: data.from });
@@ -330,6 +335,7 @@ export function VideoCall({
           offer,
           from: currentUserId,
           callerName: currentUsername,
+          callerAvatarUrl: currentUserAvatarUrl || "",
           callType: type,
         });
       }
@@ -486,6 +492,7 @@ export function VideoCall({
               >
                 <div className="flex flex-col items-center mt-12 gap-4">
                   <Avatar className="h-24 w-24 border-2 border-primary/50 shadow-lg animate-pulse">
+                    {selectedUserAvatarUrl && <AvatarImage src={selectedUserAvatarUrl} alt={selectedUsername || ""} className="object-cover" />}
                     <AvatarFallback className="text-3xl bg-primary text-primary-foreground font-semibold">
                       {selectedUsername?.[0].toUpperCase()}
                     </AvatarFallback>
@@ -554,6 +561,7 @@ export function VideoCall({
               >
                 <div className="flex flex-col items-center mt-12 gap-4">
                   <Avatar className="h-24 w-24 border-2 border-green-500/50 shadow-lg animate-bounce">
+                    {incomingCallData.callerAvatarUrl && <AvatarImage src={incomingCallData.callerAvatarUrl} alt={incomingCallData.callerName} className="object-cover" />}
                     <AvatarFallback className="text-3xl bg-green-600 text-white font-semibold">
                       {incomingCallData.callerName[0].toUpperCase()}
                     </AvatarFallback>
@@ -601,6 +609,13 @@ export function VideoCall({
                       {!remoteStream && (
                         <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950 gap-4 text-white">
                           <Avatar className="h-20 w-20 animate-pulse">
+                            {(selectedUserAvatarUrl || incomingCallData?.callerAvatarUrl) && (
+                              <AvatarImage 
+                                src={selectedUserAvatarUrl || incomingCallData?.callerAvatarUrl || ""} 
+                                alt={selectedUsername || incomingCallData?.callerName || ""} 
+                                className="object-cover" 
+                              />
+                            )}
                             <AvatarFallback className="text-2xl">
                               {selectedUsername?.[0].toUpperCase() || incomingCallData?.callerName?.[0].toUpperCase()}
                             </AvatarFallback>
@@ -640,6 +655,13 @@ export function VideoCall({
                       <div className="absolute inset-0 bg-green-500/20 rounded-full animate-ping scale-[1.5]"></div>
                       <div className="absolute inset-0 bg-green-500/10 rounded-full animate-pulse scale-[2]"></div>
                       <Avatar className="h-40 w-40 border-4 border-green-500/50 shadow-2xl relative z-10">
+                        {(selectedUserAvatarUrl || incomingCallData?.callerAvatarUrl) && (
+                          <AvatarImage 
+                            src={selectedUserAvatarUrl || incomingCallData?.callerAvatarUrl || ""} 
+                            alt={selectedUsername || incomingCallData?.callerName || ""} 
+                            className="object-cover" 
+                          />
+                        )}
                         <AvatarFallback className="text-6xl bg-slate-800 text-white font-bold">
                           {selectedUsername?.[0].toUpperCase() || incomingCallData?.callerName?.[0].toUpperCase()}
                         </AvatarFallback>

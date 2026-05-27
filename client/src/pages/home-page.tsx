@@ -1181,8 +1181,10 @@ export default function HomePage() {
         <VideoCall
           currentUserId={user.id}
           currentUsername={user.username}
+          currentUserAvatarUrl={user.avatarUrl || null}
           selectedUserId={selectedUser?.id || null}
           selectedUsername={selectedUser?.username || null}
+          selectedUserAvatarUrl={selectedUser?.avatarUrl || null}
           onCallActiveChange={(active) => {
             // handle call active status if needed
           }}

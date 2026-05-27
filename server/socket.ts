@@ -40,7 +40,7 @@ export function setupSocketIO(server: HttpServer) {
     });
 
     // Relay call request to callee
-    socket.on("call-user", (data: { to: string; offer: any; from: string; callerName: string; callType: "video" | "voice" }) => {
+    socket.on("call-user", (data: { to: string; offer: any; from: string; callerName: string; callerAvatarUrl?: string; callType: "video" | "voice" }) => {
       const calleeSocketId = userSocketMap.get(data.to);
       if (calleeSocketId) {
         log(`Relaying ${data.callType} call from ${data.from} to ${data.to}`, "socket.io");
@@ -48,6 +48,7 @@ export function setupSocketIO(server: HttpServer) {
           from: data.from,
           offer: data.offer,
           callerName: data.callerName,
+          callerAvatarUrl: data.callerAvatarUrl || "",
           callType: data.callType || "video", // Default to video if not provided
         });
       } else {
