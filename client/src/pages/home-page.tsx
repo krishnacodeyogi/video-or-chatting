@@ -4,7 +4,7 @@ import { User, Message, insertMessageSchema, insertUserSchema, insertGroupSchema
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card } from "@/components/ui/card";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -12,7 +12,7 @@ import { useEffect, useRef, useState } from "react";
 import { Form, FormControl, FormField, FormItem, FormLabel } from "@/components/ui/form";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
-import { LogOut, Send, Circle, Search, Moon, Sun, Trash2, Info, Plus, Users, Video, Phone } from "lucide-react";
+import { LogOut, Send, Circle, Search, Moon, Sun, Trash2, Info, Plus, Users, Video, Phone, Camera, Check, User as UserIcon } from "lucide-react";
 import { debounce } from "lodash";
 import { useToast } from "@/hooks/use-toast";
 import { Paperclip, X, Trash, Loader2 } from "lucide-react";
@@ -23,26 +23,40 @@ import { VideoCall } from "@/components/video-call";
 
 function UserProfileDialog({ user }: { user: User }) {
   return (
-    <DialogContent>
-      <DialogHeader>
-        <DialogTitle>User Profile</DialogTitle>
+    <DialogContent className="sm:max-w-[425px] overflow-hidden bg-background/95 backdrop-blur-md border border-border/50 shadow-2xl">
+      <DialogHeader className="pb-4 border-b border-border/30">
+        <DialogTitle className="text-xl font-bold tracking-tight bg-gradient-to-r from-primary to-primary/80 bg-clip-text text-transparent">User Profile</DialogTitle>
       </DialogHeader>
-      <div className="flex items-center gap-4 p-4">
-        <Avatar className="h-16 w-16">
-          <AvatarFallback className="text-xl">{user.username[0].toUpperCase()}</AvatarFallback>
-        </Avatar>
-        <div>
-          <h3 className="text-lg font-semibold">{user.username}</h3>
-          <p className="text-sm text-muted-foreground flex items-center gap-1">
+      <div className="flex flex-col items-center gap-6 p-6">
+        <div className="relative group">
+          <Avatar className="h-28 w-28 border-4 border-primary/20 shadow-lg transition-transform duration-300 group-hover:scale-105">
+            {user.avatarUrl && <AvatarImage src={user.avatarUrl} alt={user.username} className="object-cover" />}
+            <AvatarFallback className="text-3xl font-semibold bg-primary/10 text-primary">{user.username[0].toUpperCase()}</AvatarFallback>
+          </Avatar>
+        </div>
+        <div className="text-center space-y-1">
+          <h3 className="text-2xl font-bold tracking-tight">{user.displayName || user.username}</h3>
+          <p className="text-sm text-muted-foreground font-medium">@{user.username}</p>
+          <div className="flex items-center justify-center gap-1.5 mt-2">
             {user.isOnline ? (
-              <>
-                <Circle className="h-2 w-2 fill-green-500 text-green-500" />
-                <span>Online</span>
-              </>
+              <span className="flex items-center gap-1 bg-green-500/10 text-green-600 dark:text-green-400 px-2.5 py-0.5 rounded-full text-xs font-semibold">
+                <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
+                Online
+              </span>
             ) : (
-              <>Last seen: {new Date(user.lastSeen).toLocaleString()}</>
+              <span className="text-xs text-muted-foreground bg-muted px-2.5 py-0.5 rounded-full font-medium">
+                Last seen: {new Date(user.lastSeen).toLocaleString()}
+              </span>
             )}
-          </p>
+          </div>
+        </div>
+        <div className="w-full space-y-2.5 pt-4 border-t border-border/30">
+          <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">About / Bio</h4>
+          <Card className="p-4 bg-muted/30 border border-border/20 shadow-sm rounded-xl">
+            <p className="text-sm text-foreground/90 font-medium leading-relaxed italic">
+              "{user.bio || "Hey there! I am using QuickTalk."}"
+            </p>
+          </Card>
         </div>
       </div>
     </DialogContent>
@@ -52,29 +66,84 @@ function UserProfileDialog({ user }: { user: User }) {
 function ProfileEditDialog({ user }: { user: User }) {
   const { toast } = useToast();
   const [isOpen, setIsOpen] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const profileSchema = z.object({
+    username: z.string().min(3, "Username must be at least 3 characters"),
+    displayName: z.string().max(40, "Display name must be under 40 characters").optional(),
+    bio: z.string().max(150, "Bio must be under 150 characters").optional(),
+    avatarUrl: z.string().optional(),
+    password: z.string().optional(),
+  });
 
   const form = useForm({
-    resolver: zodResolver(
-      insertUserSchema.extend({
-        password: z.string().min(1, "Password is required").optional(),
-      })
-    ),
+    resolver: zodResolver(profileSchema),
     defaultValues: {
       username: user.username,
+      displayName: user.displayName || "",
+      bio: user.bio || "Hey there! I am using QuickTalk.",
+      avatarUrl: user.avatarUrl || "",
       password: "",
     },
   });
 
+  const bioText = form.watch("bio") || "";
+  const avatarUrl = form.watch("avatarUrl") || "";
+
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 2 * 1024 * 1024) {
+      toast({
+        title: "File too large",
+        description: "Please choose an image under 2MB.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsUploading(true);
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const res = await fetch("/api/messages/upload", {
+        method: "POST",
+        credentials: "include",
+        body: formData,
+      });
+      if (!res.ok) throw new Error("Failed to upload image");
+      const data = await res.json();
+      form.setValue("avatarUrl", data.fileUrl);
+      toast({
+        title: "Avatar uploaded successfully",
+        description: "Be sure to click Save Changes to apply changes permanent.",
+      });
+    } catch (err: any) {
+      toast({
+        title: "Upload failed",
+        description: err.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   const updateProfileMutation = useMutation({
-    mutationFn: async (data: { username: string; password?: string }) => {
-      const res = await apiRequest("PATCH", "/api/user", data);
+    mutationFn: async (data: any) => {
+      const payload = { ...data };
+      if (!payload.password) delete payload.password;
+      const res = await apiRequest("PATCH", "/api/user", payload);
       return res.json();
     },
     onSuccess: (updatedUser) => {
       queryClient.setQueryData(["/api/user"], updatedUser);
       toast({
-        title: "Profile updated",
-        description: "Your profile has been updated successfully.",
+        title: "Profile updated successfully",
+        description: "Your profile details have been saved.",
       });
       setIsOpen(false);
     },
@@ -87,44 +156,169 @@ function ProfileEditDialog({ user }: { user: User }) {
     },
   });
 
+  const BIO_PRESETS = [
+    "Hey there! I am using QuickTalk.",
+    "Available",
+    "Busy",
+    "At school",
+    "At work",
+    "In a meeting",
+    "Sleeping 😴",
+    "Coding 💻",
+  ];
+
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
-        <Button variant="ghost" size="sm">
+        <Button variant="ghost" size="sm" className="h-8 hover:bg-accent rounded-md px-2 text-xs font-semibold text-primary transition-all flex items-center gap-1">
           Edit Profile
         </Button>
       </DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Edit Profile</DialogTitle>
+      <DialogContent className="sm:max-w-[480px] bg-background/95 backdrop-blur-md border border-border/50 shadow-2xl overflow-y-auto max-h-[90vh]">
+        <DialogHeader className="pb-3 border-b border-border/30">
+          <DialogTitle className="text-xl font-bold tracking-tight bg-gradient-to-r from-primary to-primary/80 bg-clip-text text-transparent">Edit Profile</DialogTitle>
         </DialogHeader>
+        
+        {/* Profile Avatar Editor */}
+        <div className="flex flex-col items-center gap-3 py-4">
+          <div 
+            onClick={() => !isUploading && fileInputRef.current?.click()}
+            className="relative h-24 w-24 rounded-full border-2 border-primary/20 shadow-md cursor-pointer overflow-hidden group transition-transform duration-300 hover:scale-105"
+          >
+            {avatarUrl ? (
+              <img src={avatarUrl} alt="Preview" className="h-full w-full object-cover" />
+            ) : (
+              <div className="h-full w-full bg-primary/10 text-primary flex items-center justify-center text-2xl font-bold">
+                {user.username[0].toUpperCase()}
+              </div>
+            )}
+            
+            {/* Hover overlay */}
+            <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+              <Camera className="h-5 w-5 animate-bounce" />
+              <span className="text-[10px] font-bold mt-1">Change photo</span>
+            </div>
+            
+            {/* Loading spinner */}
+            {isUploading && (
+              <div className="absolute inset-0 bg-black/60 flex items-center justify-center text-white">
+                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+              </div>
+            )}
+          </div>
+          
+          <input 
+            type="file" 
+            ref={fileInputRef} 
+            onChange={handleAvatarChange} 
+            accept="image/*" 
+            className="hidden" 
+          />
+          
+          {avatarUrl && (
+            <Button 
+              type="button" 
+              variant="link" 
+              size="sm" 
+              onClick={() => form.setValue("avatarUrl", "")} 
+              className="text-xs text-destructive hover:underline p-0 h-auto"
+            >
+              Remove photo
+            </Button>
+          )}
+        </div>
+
         <Form {...form}>
           <form onSubmit={form.handleSubmit((data) => updateProfileMutation.mutate(data))} className="space-y-4">
+            <FormField
+              control={form.control}
+              name="displayName"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-xs font-bold uppercase text-muted-foreground tracking-wider flex items-center gap-1.5">
+                    <UserIcon className="h-3.5 w-3.5" /> Display Name
+                  </FormLabel>
+                  <FormControl>
+                    <Input placeholder="Enter your display name (e.g. Krishna)" className="rounded-xl bg-muted/30 focus-visible:ring-primary/45 border-border/50" {...field} />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+            
+            <FormField
+              control={form.control}
+              name="bio"
+              render={({ field }) => (
+                <FormItem>
+                  <div className="flex justify-between items-center">
+                    <FormLabel className="text-xs font-bold uppercase text-muted-foreground tracking-wider flex items-center gap-1.5">
+                      <Info className="h-3.5 w-3.5" /> About / Bio
+                    </FormLabel>
+                    <span className="text-[10px] text-muted-foreground font-semibold">
+                      {bioText.length}/150
+                    </span>
+                  </div>
+                  <FormControl>
+                    <Input 
+                      placeholder="Add a bio or status..." 
+                      maxLength={150} 
+                      className="rounded-xl bg-muted/30 focus-visible:ring-primary/45 border-border/50" 
+                      {...field} 
+                    />
+                  </FormControl>
+                  
+                  {/* WhatsApp-like presets */}
+                  <div className="pt-2">
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1.5">Quick presets:</span>
+                    <div className="flex flex-wrap gap-1.5 max-h-[64px] overflow-y-auto pr-1">
+                      {BIO_PRESETS.map((preset) => (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => form.setValue("bio", preset)}
+                          className={cn(
+                            "text-[10px] px-2.5 py-1 rounded-full border transition-all font-medium",
+                            bioText === preset
+                              ? "bg-primary text-primary-foreground border-primary"
+                              : "bg-muted/40 hover:bg-muted text-muted-foreground border-border/30"
+                          )}
+                        >
+                          {preset}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </FormItem>
+              )}
+            />
+
             <FormField
               control={form.control}
               name="username"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Username</FormLabel>
+                  <FormLabel className="text-xs font-bold uppercase text-muted-foreground tracking-wider">Username</FormLabel>
                   <FormControl>
-                    <Input {...field} />
+                    <Input className="rounded-xl bg-muted/30 focus-visible:ring-primary/45 border-border/50" {...field} />
                   </FormControl>
                 </FormItem>
               )}
             />
+            
             <FormField
               control={form.control}
               name="password"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>New Password (optional)</FormLabel>
+                  <FormLabel className="text-xs font-bold uppercase text-muted-foreground tracking-wider">New Password (optional)</FormLabel>
                   <FormControl>
-                    <Input type="password" {...field} />
+                    <Input type="password" placeholder="Leave blank to keep current" className="rounded-xl bg-muted/30 focus-visible:ring-primary/45 border-border/50" {...field} />
                   </FormControl>
                 </FormItem>
               )}
             />
-            <Button type="submit" className="w-full" disabled={updateProfileMutation.isPending}>
+            
+            <Button type="submit" className="w-full rounded-xl mt-4 font-bold shadow-lg transition-transform duration-200 active:scale-[0.98]" disabled={updateProfileMutation.isPending}>
               {updateProfileMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Save Changes
             </Button>
@@ -220,9 +414,10 @@ function CreateGroupDialog({ onCreated }: { onCreated: () => void }) {
                       }}
                     />
                     <Avatar className="h-8 w-8">
+                      {user.avatarUrl && <AvatarImage src={user.avatarUrl} alt={user.username} className="object-cover" />}
                       <AvatarFallback>{user.username[0].toUpperCase()}</AvatarFallback>
                     </Avatar>
-                    <span>{user.username}</span>
+                    <span>{user.displayName || user.username}</span>
                   </div>
                 ))}
               </ScrollArea>
@@ -350,10 +545,11 @@ function ChatArea({ selectedUser, currentUser, onStartCall }: { selectedUser: Us
       <div className="p-4 border-b flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Avatar>
+            {selectedUser.avatarUrl && <AvatarImage src={selectedUser.avatarUrl} alt={selectedUser.username} className="object-cover" />}
             <AvatarFallback>{selectedUser.username[0].toUpperCase()}</AvatarFallback>
           </Avatar>
           <div>
-            <div className="font-semibold">{selectedUser.username}</div>
+            <div className="font-semibold">{selectedUser.displayName || selectedUser.username}</div>
             <div className="text-sm text-muted-foreground flex items-center gap-1">
               {selectedUser.isOnline ? (
                 <>
@@ -835,10 +1031,11 @@ export default function HomePage() {
         <div className="p-4 border-b flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Avatar>
+              {user?.avatarUrl && <AvatarImage src={user.avatarUrl} alt={user.username} className="object-cover" />}
               <AvatarFallback>{user?.username[0].toUpperCase()}</AvatarFallback>
             </Avatar>
             <div className="flex flex-col">
-              <span className="font-semibold">{user?.username}</span>
+              <span className="font-semibold">{user?.displayName || user?.username}</span>
               <ProfileEditDialog user={user!} />
             </div>
           </div>
@@ -898,10 +1095,11 @@ export default function HomePage() {
                     )}
                   >
                     <Avatar>
+                      {u.avatarUrl && <AvatarImage src={u.avatarUrl} alt={u.username} className="object-cover" />}
                       <AvatarFallback>{u.username[0].toUpperCase()}</AvatarFallback>
                     </Avatar>
                     <div className="flex-1 text-left">
-                      <div className="font-medium">{u.username}</div>
+                      <div className="font-medium">{u.displayName || u.username}</div>
                       <div className="text-sm text-muted-foreground flex items-center gap-1">
                         {u.isOnline ? (
                           <>

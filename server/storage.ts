@@ -47,7 +47,11 @@ export class MongoStorage implements IStorage {
 
   async createUser(userData: Omit<UserType, "id" | "isOnline" | "lastSeen">): Promise<UserType> {
     const user = await User.create({
-      ...userData,
+      username: userData.username,
+      password: userData.password,
+      displayName: userData.displayName || "",
+      bio: userData.bio || "Hey there! I am using QuickTalk.",
+      avatarUrl: userData.avatarUrl || "",
       isOnline: false,
       lastSeen: new Date()
     });
@@ -174,7 +178,10 @@ export class MongoStorage implements IStorage {
       username: user.username,
       password: user.password,
       isOnline: user.isOnline,
-      lastSeen: user.lastSeen
+      lastSeen: user.lastSeen,
+      displayName: user.displayName || "",
+      bio: user.bio || "Hey there! I am using QuickTalk.",
+      avatarUrl: user.avatarUrl || ""
     };
   }
 

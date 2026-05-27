@@ -195,7 +195,7 @@ setupAuth(app);
     if (!req.isAuthenticated()) return res.sendStatus(401);
 
     try {
-      const { username, password } = req.body;
+      const { username, password, displayName, bio, avatarUrl } = req.body;
 
       if (username) {
         const existingUser = await storage.getUserByUsername(username);
@@ -204,10 +204,16 @@ setupAuth(app);
         }
       }
 
-      const user = await storage.updateUser(req.user!.id, {
-        ...req.body,
-        password: password ? await hashPassword(password) : undefined,
-      });
+      const updates: any = {};
+      if (username) updates.username = username;
+      if (displayName !== undefined) updates.displayName = displayName;
+      if (bio !== undefined) updates.bio = bio;
+      if (avatarUrl !== undefined) updates.avatarUrl = avatarUrl;
+      if (password) {
+        updates.password = await hashPassword(password);
+      }
+
+      const user = await storage.updateUser(req.user!.id, updates);
 
       res.json(user);
     } catch (err) {

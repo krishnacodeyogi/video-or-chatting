@@ -8,6 +8,9 @@ export const users = pgTable("users", {
   password: text("password").notNull(),
   isOnline: boolean("is_online").notNull().default(false),
   lastSeen: timestamp("last_seen").notNull().defaultNow(),
+  displayName: text("display_name").notNull().default(""),
+  bio: text("bio").notNull().default("Hey there! I am using QuickTalk."),
+  avatarUrl: text("avatar_url").notNull().default(""),
 });
 
 export const groups = pgTable("groups", {

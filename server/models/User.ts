@@ -17,6 +17,18 @@ const userSchema = new mongoose.Schema({
   lastSeen: { 
     type: Date, 
     default: Date.now 
+  },
+  displayName: {
+    type: String,
+    default: ""
+  },
+  bio: {
+    type: String,
+    default: "Hey there! I am using QuickTalk."
+  },
+  avatarUrl: {
+    type: String,
+    default: ""
   }
 });
 
