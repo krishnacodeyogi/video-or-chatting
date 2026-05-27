@@ -20,6 +20,7 @@ interface VideoCallProps {
 export function VideoCall({
   currentUserId,
   currentUsername,
+  selectedUserId,
   selectedUsername,
   onCallActiveChange,
   triggerCall = null,
