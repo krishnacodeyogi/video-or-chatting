@@ -672,7 +672,7 @@ function ChatArea({ selectedUser, currentUser, onStartCall, onBack }: { selected
         </div>
       </ScrollArea>
 
-      <div className="p-4 border-t">
+      <div className="p-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] border-t bg-background/95 backdrop-blur-sm">
         <Form {...form}>
           <form
             onSubmit={(e) => {
@@ -925,7 +925,7 @@ function GroupChatArea({ group, currentUser, onBack }: { group: Group; currentUs
         </div>
       </ScrollArea>
 
-      <div className="p-4 border-t">
+      <div className="p-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] border-t bg-background/95 backdrop-blur-sm">
         <Form {...form}>
           <form
             onSubmit={(e) => {
@@ -1044,7 +1044,7 @@ export default function HomePage() {
   };
 
   return (
-    <div className="flex flex-col md:flex-row h-screen bg-background overflow-hidden">
+    <div className="flex flex-col md:flex-row h-[100dvh] bg-background overflow-hidden">
       {/* Sidebar */}
       <div className={cn(
         "w-full md:w-80 border-r flex flex-col h-full bg-background transition-all duration-300",
