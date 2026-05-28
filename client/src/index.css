@@ -4,10 +4,61 @@
 
 @layer base {
   * {
-    @apply border-border;
+    @apply border-border selection:bg-primary/20 selection:text-primary;
   }
 
   body {
-    @apply font-sans antialiased bg-background text-foreground;
+    font-family: 'Plus Jakarta Sans', 'Outfit', sans-serif;
+    @apply antialiased bg-background text-foreground transition-colors duration-300;
   }
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-muted-foreground/15 rounded-full hover:bg-muted-foreground/30 transition-all;
+}
+
+/* Glassmorphism helpers */
+.glass-panel {
+  @apply bg-background/65 backdrop-blur-lg border border-border/40 shadow-xl shadow-black/5;
+}
+
+.glass-panel-dark {
+  @apply bg-slate-900/65 backdrop-blur-xl border border-white/10 shadow-2xl;
+}
+
+/* Dynamic custom float animations for gradient blobs */
+@keyframes float-slow {
+  0%, 100% {
+    transform: translateY(0px) scale(1);
+  }
+  50% {
+    transform: translateY(-20px) scale(1.05);
+  }
+}
+
+@keyframes float-medium {
+  0%, 100% {
+    transform: translateY(0px) scale(1) rotate(0deg);
+  }
+  50% {
+    transform: translateY(20px) scale(0.95) rotate(180deg);
+  }
+}
+
+.animate-float-slow {
+  animation: float-slow 12s ease-in-out infinite;
+}
+
+.animate-float-medium {
+  animation: float-medium 8s ease-in-out infinite;
 }

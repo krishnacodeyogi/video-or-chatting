@@ -12,7 +12,7 @@ import { useEffect, useRef, useState } from "react";
 import { Form, FormControl, FormField, FormItem, FormLabel } from "@/components/ui/form";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
-import { LogOut, Send, Circle, Search, Moon, Sun, Trash2, Info, Plus, Users, Video, Phone, Camera, Check, User as UserIcon } from "lucide-react";
+import { LogOut, Send, Circle, Search, Moon, Sun, Trash2, Info, Plus, Users, Video, Phone, Camera, Check, User as UserIcon, ArrowLeft, MessagesSquare } from "lucide-react";
 import { debounce } from "lodash";
 import { useToast } from "@/hooks/use-toast";
 import { Paperclip, X, Trash, Loader2 } from "lucide-react";
@@ -432,7 +432,7 @@ function CreateGroupDialog({ onCreated }: { onCreated: () => void }) {
   );
 }
 
-function ChatArea({ selectedUser, currentUser, onStartCall }: { selectedUser: User; currentUser: User; onStartCall: (type: "video" | "voice") => void }) {
+function ChatArea({ selectedUser, currentUser, onStartCall, onBack }: { selectedUser: User; currentUser: User; onStartCall: (type: "video" | "voice") => void; onBack?: () => void }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   const [longPressTimer, setLongPressTimer] = useState<NodeJS.Timeout | null>(null);
@@ -541,8 +541,18 @@ function ChatArea({ selectedUser, currentUser, onStartCall }: { selectedUser: Us
 
   return (
     <>
-      <div className="p-4 border-b flex items-center justify-between">
+      <div className="p-4 border-b flex items-center justify-between bg-background/95 backdrop-blur-sm sticky top-0 z-10">
         <div className="flex items-center gap-2">
+          {onBack && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="md:hidden mr-1 rounded-full text-muted-foreground hover:text-foreground h-9 w-9 p-0 flex items-center justify-center transition-all"
+              onClick={onBack}
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+          )}
           <Avatar>
             {selectedUser.avatarUrl && <AvatarImage src={selectedUser.avatarUrl} alt={selectedUser.username} className="object-cover" />}
             <AvatarFallback>{selectedUser.username[0].toUpperCase()}</AvatarFallback>
@@ -596,10 +606,10 @@ function ChatArea({ selectedUser, currentUser, onStartCall }: { selectedUser: Us
                 onTouchEnd={handleTouchEnd}
                 onTouchMove={handleTouchEnd}
                 className={cn(
-                  "max-w-[70%] p-3 relative group touch-none",
+                  "max-w-[70%] px-4 py-2.5 relative group touch-none shadow-[0_2px_8px_rgba(0,0,0,0.03)] border-0",
                   message.senderId === currentUser.id
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-accent",
+                    ? "bg-gradient-to-tr from-primary to-emerald-600 text-primary-foreground rounded-2xl rounded-br-sm font-medium"
+                    : "bg-muted/70 hover:bg-muted text-foreground rounded-2xl rounded-bl-sm font-medium border border-border/10",
                   selectedMessageId === message.id && "opacity-50"
                 )}
               >
@@ -719,7 +729,7 @@ function ChatArea({ selectedUser, currentUser, onStartCall }: { selectedUser: Us
 }
 
 
-function GroupChatArea({ group, currentUser }: { group: Group; currentUser: User }) {
+function GroupChatArea({ group, currentUser, onBack }: { group: Group; currentUser: User; onBack?: () => void }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
@@ -814,8 +824,18 @@ function GroupChatArea({ group, currentUser }: { group: Group; currentUser: User
 
   return (
     <>
-      <div className="p-4 border-b flex items-center justify-between">
+      <div className="p-4 border-b flex items-center justify-between bg-background/95 backdrop-blur-sm sticky top-0 z-10">
         <div className="flex items-center gap-2">
+          {onBack && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="md:hidden mr-1 rounded-full text-muted-foreground hover:text-foreground h-9 w-9 p-0 flex items-center justify-center transition-all"
+              onClick={onBack}
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+          )}
           <Avatar>
             <AvatarFallback><Users className="h-5 w-5" /></AvatarFallback>
           </Avatar>
@@ -840,10 +860,10 @@ function GroupChatArea({ group, currentUser }: { group: Group; currentUser: User
             >
               <Card
                 className={cn(
-                  "max-w-[70%] p-3 relative group",
+                  "max-w-[70%] px-4 py-2.5 relative group shadow-[0_2px_8px_rgba(0,0,0,0.03)] border-0",
                   message.senderId === currentUser.id
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-accent"
+                    ? "bg-gradient-to-tr from-primary to-emerald-600 text-primary-foreground rounded-2xl rounded-br-sm font-medium"
+                    : "bg-muted/70 hover:bg-muted text-foreground rounded-2xl rounded-bl-sm font-medium border border-border/10"
                 )}
               >
                 {message.isDeleted ? (
@@ -1024,9 +1044,12 @@ export default function HomePage() {
   };
 
   return (
-    <div className="flex flex-col md:flex-row h-screen bg-background">
+    <div className="flex flex-col md:flex-row h-screen bg-background overflow-hidden">
       {/* Sidebar */}
-      <div className="w-full md:w-80 border-r flex flex-col">
+      <div className={cn(
+        "w-full md:w-80 border-r flex flex-col h-full bg-background transition-all duration-300",
+        (selectedUser || selectedGroup) && "hidden md:flex"
+      )}>
         <div className="p-4 border-b flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Avatar>
@@ -1070,9 +1093,9 @@ export default function HomePage() {
 
           <div className="p-4 border-b">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Search className="absolute left-3.5 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
               <Input
-                className="pl-9"
+                className="pl-9 rounded-full bg-muted/30 border-border/40 focus-visible:ring-primary/45 transition-all"
                 placeholder={activeTab === "chats" ? "Search users..." : "Search groups..."}
                 onChange={(e) => debouncedSearch(e.target.value)}
               />
@@ -1089,8 +1112,8 @@ export default function HomePage() {
                       setSelectedGroup(null);
                     }}
                     className={cn(
-                      "w-full p-4 flex items-center gap-3 hover:bg-accent transition-colors",
-                      selectedUser?.id === u.id && "bg-accent"
+                      "w-[calc(100%-16px)] mx-2 my-1 p-3 flex items-center gap-3 hover:bg-accent/40 rounded-2xl transition-all duration-200 border border-transparent text-left",
+                      selectedUser?.id === u.id && "bg-accent/80 border-border/30 shadow-[0_2px_8px_rgba(0,0,0,0.02)]"
                     )}
                   >
                     <Avatar>
@@ -1138,8 +1161,8 @@ export default function HomePage() {
                     setSelectedUser(null);
                   }}
                   className={cn(
-                    "w-full p-4 flex items-center gap-3 hover:bg-accent transition-colors",
-                    selectedGroup?.id === group.id && "bg-accent"
+                    "w-[calc(100%-16px)] mx-2 my-1 p-3 flex items-center gap-3 hover:bg-accent/40 rounded-2xl transition-all duration-200 border border-transparent text-left",
+                    selectedGroup?.id === group.id && "bg-accent/80 border-border/30 shadow-[0_2px_8px_rgba(0,0,0,0.02)]"
                   )}
                 >
                   <Avatar>
@@ -1159,18 +1182,34 @@ export default function HomePage() {
       </div>
 
       {/* Chat Area */}
-      <div className="flex-1 flex flex-col">
+      <div className={cn(
+        "flex-1 flex flex-col h-full bg-background transition-all duration-300",
+        (!selectedUser && !selectedGroup) && "hidden md:flex"
+      )}>
         {selectedUser ? (
           <ChatArea
             selectedUser={selectedUser}
             currentUser={user!}
             onStartCall={(type) => setTriggerCall({ id: Date.now(), type })}
+            onBack={() => {
+              setSelectedUser(null);
+            }}
           />
         ) : selectedGroup ? (
-          <GroupChatArea group={selectedGroup} currentUser={user!} />
+          <GroupChatArea
+            group={selectedGroup}
+            currentUser={user!}
+            onBack={() => {
+              setSelectedGroup(null);
+            }}
+          />
         ) : (
-          <div className="flex-1 flex items-center justify-center text-muted-foreground">
-            Select a chat or group to start messaging
+          <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground bg-muted/10 p-6">
+            <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center text-primary mb-4 animate-pulse">
+              <MessagesSquare className="h-8 w-8" />
+            </div>
+            <div className="font-semibold text-lg text-foreground">QuickTalk Web</div>
+            <p className="text-sm text-center max-w-xs mt-1">Select a friend or join a group from the sidebar to start instant chat.</p>
           </div>
         )}
       </div>
