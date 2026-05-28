@@ -77,6 +77,23 @@ export function VideoCall({
 
   const activePeerIdRef = useRef<string | null>(null);
 
+  // Keep a reference to the latest states and handlers to avoid stale closures in socket events
+  const handlersRef = useRef({
+    endCall: () => {},
+    rejectCall: () => {},
+    acceptCall: () => {},
+    callState: "idle",
+  });
+
+  useEffect(() => {
+    handlersRef.current = {
+      endCall,
+      rejectCall,
+      acceptCall,
+      callState,
+    };
+  });
+
   // Trigger outgoing call when parent signals
   useEffect(() => {
     if (triggerCall && triggerCall.id > 0) {
@@ -172,7 +189,7 @@ export function VideoCall({
 
     // Handle Incoming Call
     socket.on("incoming-call", (data: { from: string; offer: any; callerName: string; callerAvatarUrl?: string; callType: "video" | "voice" }) => {
-      if (callState !== "idle") {
+      if (handlersRef.current.callState !== "idle") {
         // If busy, auto-reject
         socket.emit("reject-call", { to: data.from });
         return;
@@ -208,7 +225,7 @@ export function VideoCall({
           pendingCandidatesRef.current = [];
         } catch (e) {
           console.error("Error setting remote description:", e);
-          endCall();
+          handlersRef.current.endCall();
         }
       }
     });
@@ -235,7 +252,7 @@ export function VideoCall({
         description: "The user declined your video call.",
         variant: "destructive",
       });
-      endCall();
+      handlersRef.current.endCall();
     });
 
     // Handle Call Ended
@@ -245,7 +262,7 @@ export function VideoCall({
         title: "Call Ended",
         description: "The video call has ended.",
       });
-      endCall();
+      handlersRef.current.endCall();
     });
 
     // Handle call failed (offline user)
@@ -256,14 +273,14 @@ export function VideoCall({
         description: data.reason,
         variant: "destructive",
       });
-      endCall();
+      handlersRef.current.endCall();
     });
 
     return () => {
       stopRingtone();
       socket.disconnect();
     };
-  }, [currentUserId, callState]);
+  }, [currentUserId]);
 
   // Handle local camera and microphone stream
   const startLocalStream = async (type: "video" | "voice") => {
