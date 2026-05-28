@@ -141,11 +141,13 @@ setupAuth(app);
     try {
       const data = insertMessageSchema.parse(req.body);
       const message = await storage.createMessage({
-        ...data,
+        content: data.content,
         senderId: req.user!.id,
-        fileUrl: null,
-        fileName: null,
-        fileType: null,
+        recipientId: data.recipientId || null,
+        groupId: data.groupId || null,
+        fileUrl: req.body.fileUrl || null,
+        fileName: req.body.fileName || (req.body.fileUrl ? path.basename(req.body.fileUrl) : null),
+        fileType: req.body.fileType || null,
         isDeleted: false
       });
       res.json(message);

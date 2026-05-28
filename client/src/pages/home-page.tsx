@@ -784,7 +784,7 @@ function GroupChatArea({ group, currentUser, onBack }: { group: Group; currentUs
 
   const messageMutation = useMutation({
     mutationFn: async (data: { groupId: string; content: string; fileUrl?: string; fileType?: string }) => {
-      const res = await apiRequest("POST", "/api/groups/messages", data);
+      const res = await apiRequest("POST", "/api/messages", data);
       return res.json();
     },
     onSuccess: () => {
