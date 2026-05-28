@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { io, Socket } from "socket.io-client";
-import { Phone, PhoneOff, Video, VideoOff, Mic, MicOff, Volume2, VolumeX } from "lucide-react";
+import { Phone, PhoneOff, Video, VideoOff, Mic, MicOff, Volume2, VolumeX, RefreshCw } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -52,6 +52,9 @@ export function VideoCall({
     username: string;
     avatarUrl: string | null;
   } | null>(null);
+
+  const [videoDevices, setVideoDevices] = useState<MediaDeviceInfo[]>([]);
+  const [currentVideoDeviceId, setCurrentVideoDeviceId] = useState<string>("");
 
   // Callback refs to robustly bind media streams when conditional elements mount
   const localVideoCallback = React.useCallback(
@@ -282,16 +285,100 @@ export function VideoCall({
     };
   }, [currentUserId]);
 
+  // Enumerate cameras when component mounts
+  useEffect(() => {
+    updateVideoDevices();
+  }, []);
+
+  const updateVideoDevices = async () => {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const cameras = devices.filter((d) => d.kind === "videoinput");
+      setVideoDevices(cameras);
+      if (cameras.length > 0 && !currentVideoDeviceId) {
+        setCurrentVideoDeviceId(cameras[0].deviceId);
+      }
+    } catch (e) {
+      console.warn("Error enumerating devices:", e);
+    }
+  };
+
+  const switchCamera = async () => {
+    if (videoDevices.length <= 1) {
+      toast({
+        title: "No other camera found",
+        description: "Your device only has one camera available.",
+      });
+      return;
+    }
+
+    const currentIndex = videoDevices.findIndex((d) => d.deviceId === currentVideoDeviceId);
+    const nextIndex = (currentIndex + 1) % videoDevices.length;
+    const nextCamera = videoDevices[nextIndex];
+    setCurrentVideoDeviceId(nextCamera.deviceId);
+
+    if (localStream) {
+      try {
+        const oldVideoTrack = localStream.getVideoTracks()[0];
+        if (oldVideoTrack) {
+          oldVideoTrack.stop();
+        }
+
+        const newStream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            deviceId: { exact: nextCamera.deviceId },
+            width: { min: 640, ideal: 1920, max: 1920 },
+            height: { min: 480, ideal: 1080, max: 1080 },
+            frameRate: { ideal: 30, max: 60 }
+          },
+          audio: false,
+        });
+
+        const newVideoTrack = newStream.getVideoTracks()[0];
+        const updatedStream = new MediaStream([
+          newVideoTrack,
+          ...localStream.getAudioTracks()
+        ]);
+        setLocalStream(updatedStream);
+
+        if (peerConnectionRef.current) {
+          const videoSender = peerConnectionRef.current.getSenders().find(
+            (s) => s.track && s.track.kind === "video"
+          );
+          if (videoSender) {
+            await videoSender.replaceTrack(newVideoTrack);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to switch camera:", err);
+        toast({
+          title: "Switch Camera Failed",
+          description: "Could not access the selected camera.",
+          variant: "destructive",
+        });
+      }
+    }
+  };
+
   // Handle local camera and microphone stream
   const startLocalStream = async (type: "video" | "voice") => {
     try {
+      const videoConstraints: any = type === "video" ? {
+        width: { min: 640, ideal: 1920, max: 1920 },
+        height: { min: 480, ideal: 1080, max: 1080 },
+        frameRate: { ideal: 30, max: 60 }
+      } : false;
+
+      if (videoConstraints) {
+        if (currentVideoDeviceId) {
+          videoConstraints.deviceId = { exact: currentVideoDeviceId };
+        } else {
+          videoConstraints.facingMode = "user";
+        }
+      }
+
       const constraints = {
-        video: type === "video" ? {
-          width: { min: 640, ideal: 1280, max: 1920 },
-          height: { min: 480, ideal: 720, max: 1080 },
-          frameRate: { ideal: 30, max: 60 },
-          facingMode: "user"
-        } : false,
+        video: videoConstraints,
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
@@ -300,6 +387,8 @@ export function VideoCall({
       };
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       setLocalStream(stream);
+      // Update devices once permissions are granted so we can read camera labels/details
+      updateVideoDevices();
       return stream;
     } catch (err) {
       toast({
@@ -566,13 +655,25 @@ export function VideoCall({
 
                 <div className="flex gap-4 mb-8">
                   {activeCallType === "video" && (
-                    <Button
-                      onClick={toggleCamera}
-                      variant="outline"
-                      className={`rounded-full h-14 w-14 p-0 border-white/20 bg-slate-800/80 hover:bg-slate-700/80 text-white ${!cameraEnabled && 'bg-red-500/80 hover:bg-red-600/80'}`}
-                    >
-                      {cameraEnabled ? <Video className="h-6 w-6" /> : <VideoOff className="h-6 w-6" />}
-                    </Button>
+                    <>
+                      <Button
+                        onClick={toggleCamera}
+                        variant="outline"
+                        className={`rounded-full h-14 w-14 p-0 border-white/20 bg-slate-800/80 hover:bg-slate-700/80 text-white ${!cameraEnabled && 'bg-red-500/80 hover:bg-red-600/80'}`}
+                      >
+                        {cameraEnabled ? <Video className="h-6 w-6" /> : <VideoOff className="h-6 w-6" />}
+                      </Button>
+                      {videoDevices.length > 1 && (
+                        <Button
+                          onClick={switchCamera}
+                          variant="outline"
+                          className="rounded-full h-14 w-14 p-0 border-white/20 bg-slate-800/80 hover:bg-slate-700/80 text-white transition-all active:scale-95 flex items-center justify-center"
+                          title="Switch Camera"
+                        >
+                          <RefreshCw className="h-6 w-6 transition-transform duration-500 hover:rotate-180" />
+                        </Button>
+                      )}
+                    </>
                   )}
                   <Button
                     onClick={toggleMic}
@@ -722,13 +823,25 @@ export function VideoCall({
                 {/* Floating control bar */}
                 <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center justify-center gap-4 bg-slate-900/70 border border-white/10 px-6 py-3 rounded-full backdrop-blur-lg z-20 shadow-2xl">
                   {activeCallType === "video" && (
-                    <Button
-                      onClick={toggleCamera}
-                      variant="outline"
-                      className={`rounded-full h-12 w-12 p-0 border-white/20 bg-slate-800/80 hover:bg-slate-700/80 text-white ${!cameraEnabled && 'bg-red-500/80 hover:bg-red-600/80'}`}
-                    >
-                      {cameraEnabled ? <Video className="h-5 w-5" /> : <VideoOff className="h-5 w-5" />}
-                    </Button>
+                    <>
+                      <Button
+                        onClick={toggleCamera}
+                        variant="outline"
+                        className={`rounded-full h-12 w-12 p-0 border-white/20 bg-slate-800/80 hover:bg-slate-700/80 text-white ${!cameraEnabled && 'bg-red-500/80 hover:bg-red-600/80'}`}
+                      >
+                        {cameraEnabled ? <Video className="h-5 w-5" /> : <VideoOff className="h-5 w-5" />}
+                      </Button>
+                      {videoDevices.length > 1 && (
+                        <Button
+                          onClick={switchCamera}
+                          variant="outline"
+                          className="rounded-full h-12 w-12 p-0 border-white/20 bg-slate-800/80 hover:bg-slate-700/80 text-white transition-all active:scale-95 flex items-center justify-center"
+                          title="Switch Camera"
+                        >
+                          <RefreshCw className="h-5 w-5 transition-transform duration-500 hover:rotate-180" />
+                        </Button>
+                      )}
+                    </>
                   )}
 
                   <Button
