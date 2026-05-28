@@ -12,7 +12,7 @@ import { useEffect, useRef, useState } from "react";
 import { Form, FormControl, FormField, FormItem, FormLabel } from "@/components/ui/form";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
-import { LogOut, Send, Circle, Search, Moon, Sun, Trash2, Info, Plus, Users, Video, Phone, Camera, Check, User as UserIcon, ArrowLeft, MessagesSquare } from "lucide-react";
+import { LogOut, Send, Circle, Search, Moon, Sun, Trash2, Info, Plus, Users, Video, Phone, Camera, Check, User as UserIcon, ArrowLeft, MessagesSquare, UserMinus } from "lucide-react";
 import { debounce } from "lodash";
 import { useToast } from "@/hooks/use-toast";
 import { Paperclip, X, Trash, Loader2 } from "lucide-react";
@@ -729,6 +729,259 @@ function ChatArea({ selectedUser, currentUser, onStartCall, onBack }: { selected
 }
 
 
+function GroupSettingsDialog({ group, currentUser, onDeleteSuccess }: { group: Group; currentUser: User; onDeleteSuccess?: () => void }) {
+  const { toast } = useToast();
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [groupName, setGroupName] = useState(group.name);
+  const [usernameInput, setUsernameInput] = useState("");
+  const [isUpdating, setIsUpdating] = useState(false);
+
+  const { data: allUsers = [] } = useQuery<User[]>({
+    queryKey: ["/api/users"],
+    refetchInterval: false,
+  });
+
+  const isOwner = group.adminId === currentUser.id;
+
+  const handleUpdateName = async () => {
+    if (!groupName.trim()) return;
+    setIsUpdating(true);
+    try {
+      await apiRequest("PATCH", `/api/groups/${group.id}`, { name: groupName });
+      queryClient.invalidateQueries({ queryKey: ["/api/groups"] });
+      toast({
+        title: "Success",
+        description: "Group name updated successfully.",
+      });
+      setIsEditingName(false);
+    } catch (err: any) {
+      toast({
+        title: "Error",
+        description: err.message || "Failed to update group name.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleAddMember = async () => {
+    if (!usernameInput.trim()) return;
+    const targetUser = allUsers.find(
+      (u) => u.username.toLowerCase() === usernameInput.trim().toLowerCase()
+    );
+
+    if (!targetUser) {
+      toast({
+        title: "User not found",
+        description: "Please check the username and try again.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (group.memberIds.includes(targetUser.id)) {
+      toast({
+        title: "Already a member",
+        description: "This user is already in the group.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsUpdating(true);
+    try {
+      await apiRequest("POST", `/api/groups/${group.id}/members`, {
+        memberIds: [targetUser.id],
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/groups"] });
+      toast({
+        title: "Member added",
+        description: `@${targetUser.username} has been added.`,
+      });
+      setUsernameInput("");
+    } catch (err: any) {
+      toast({
+        title: "Error",
+        description: err.message || "Failed to add member.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleRemoveMember = async (memberId: string, memberUsername: string) => {
+    if (!window.confirm(`Are you sure you want to remove @${memberUsername} from this group?`)) return;
+    setIsUpdating(true);
+    try {
+      await apiRequest("DELETE", `/api/groups/${group.id}/members/${memberId}`);
+      queryClient.invalidateQueries({ queryKey: ["/api/groups"] });
+      toast({
+        title: "Member removed",
+        description: `@${memberUsername} was removed.`,
+      });
+    } catch (err: any) {
+      toast({
+        title: "Error",
+        description: err.message || "Failed to remove member.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleDeleteGroup = async () => {
+    if (!window.confirm("CRITICAL: Are you sure you want to delete this group? All messages will be permanently lost!")) return;
+    setIsUpdating(true);
+    try {
+      await apiRequest("DELETE", `/api/groups/${group.id}`);
+      queryClient.invalidateQueries({ queryKey: ["/api/groups"] });
+      toast({
+        title: "Group deleted",
+        description: "The group was deleted successfully.",
+      });
+      if (onDeleteSuccess) onDeleteSuccess();
+    } catch (err: any) {
+      toast({
+        title: "Error",
+        description: err.message || "Failed to delete group.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const ownerDetails = allUsers.find(u => u.id === group.adminId);
+  const ownerName = ownerDetails ? (ownerDetails.displayName || ownerDetails.username) : "Unknown Owner";
+
+  return (
+    <DialogContent className="sm:max-w-[460px] overflow-hidden bg-background/95 backdrop-blur-md border border-border/50 shadow-2xl">
+      <DialogHeader className="pb-3 border-b border-border/30">
+        <DialogTitle className="text-xl font-bold tracking-tight bg-gradient-to-r from-primary to-primary/80 bg-clip-text text-transparent">Group Settings</DialogTitle>
+      </DialogHeader>
+      <div className="flex flex-col gap-5 p-5 max-h-[80vh] overflow-y-auto pr-2">
+        {/* Info summary */}
+        <div className="flex flex-col items-center gap-2.5 pb-4 border-b border-border/30">
+          <Avatar className="h-16 w-16 border-2 border-primary/20 shadow-md">
+            <AvatarFallback className="bg-gradient-to-tr from-primary to-emerald-500 text-white text-xl">
+              <Users className="h-8 w-8" />
+            </AvatarFallback>
+          </Avatar>
+          <div className="text-center">
+            {isEditingName ? (
+              <div className="flex items-center gap-1.5 mt-1.5">
+                <Input 
+                  value={groupName} 
+                  onChange={(e) => setGroupName(e.target.value)} 
+                  className="h-8 text-center rounded-lg border-border/50 text-sm font-semibold max-w-[180px]"
+                />
+                <Button size="sm" className="h-8 rounded-lg px-2 text-xs font-bold" onClick={handleUpdateName} disabled={isUpdating}>
+                  {isUpdating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-4.5 w-4.5" />}
+                </Button>
+                <Button size="sm" variant="ghost" className="h-8 rounded-lg px-2 text-xs text-muted-foreground" onClick={() => setIsEditingName(false)}>
+                  <X className="h-4.5 w-4.5" />
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center justify-center gap-1.5">
+                <h3 className="text-xl font-extrabold tracking-tight">{group.name}</h3>
+                {isOwner && (
+                  <Button variant="link" className="p-0 h-auto text-xs text-primary font-semibold hover:underline" onClick={() => setIsEditingName(true)}>
+                    Edit
+                  </Button>
+                )}
+              </div>
+            )}
+            <p className="text-xs text-muted-foreground font-medium mt-1">Owned by: <span className="font-bold text-foreground">@{ownerDetails?.username || ownerName}</span></p>
+          </div>
+        </div>
+
+        {/* Member addition panel (Owner only) */}
+        {isOwner && (
+          <div className="space-y-2 border-b border-border/30 pb-4">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Add Member by Username</h4>
+            <div className="flex gap-2">
+              <Input 
+                value={usernameInput}
+                onChange={(e) => setUsernameInput(e.target.value)}
+                placeholder="e.g. himanshu.1" 
+                className="rounded-xl bg-muted/20 border-border/40 focus-visible:ring-primary/45 font-medium text-sm"
+              />
+              <Button onClick={handleAddMember} disabled={isUpdating || !usernameInput.trim()} className="rounded-xl font-bold px-4">
+                {isUpdating && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
+                Add
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Members List */}
+        <div className="space-y-2">
+          <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Group Members ({group.memberIds.length})</h4>
+          <ScrollArea className="h-[150px] border border-border/40 rounded-xl bg-muted/10 p-2.5">
+            <div className="space-y-1.5">
+              {group.memberIds.map((memberId) => {
+                const member = allUsers.find(u => u.id === memberId || u.id === group.adminId);
+                if (!member) return null;
+                const name = member.displayName || member.username;
+                const isMemberOwner = member.id === group.adminId;
+
+                return (
+                  <div key={member.id} className="flex items-center justify-between p-2 rounded-xl hover:bg-accent/40 transition-colors">
+                    <div className="flex items-center gap-2">
+                      <Avatar className="h-7 w-7 border">
+                        {member.avatarUrl && <AvatarImage src={member.avatarUrl} alt={member.username} className="object-cover" />}
+                        <AvatarFallback className="text-[10px] font-bold">{member.username[0].toUpperCase()}</AvatarFallback>
+                      </Avatar>
+                      <div className="flex flex-col text-left">
+                        <span className="text-sm font-semibold leading-none">{name}</span>
+                        <span className="text-[10px] text-muted-foreground font-medium mt-0.5">@{member.username}</span>
+                      </div>
+                    </div>
+                    {isMemberOwner ? (
+                      <span className="text-[9px] bg-primary/10 text-primary font-extrabold uppercase px-2 py-0.5 rounded-full border border-primary/20 select-none">Owner</span>
+                    ) : (
+                      isOwner && (
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          onClick={() => handleRemoveMember(member.id, member.username)}
+                          disabled={isUpdating}
+                          className="h-7 w-7 rounded-full text-destructive hover:bg-destructive/10 hover:text-destructive"
+                        >
+                          <UserMinus className="h-4 w-4" />
+                        </Button>
+                      )
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </ScrollArea>
+        </div>
+
+        {/* Danger zone / deletion (Owner only) */}
+        {isOwner && (
+          <div className="pt-2 border-t border-border/30 mt-1">
+            <Button 
+              variant="destructive" 
+              onClick={handleDeleteGroup}
+              disabled={isUpdating}
+              className="w-full rounded-xl py-5 font-bold flex items-center justify-center gap-1.5 transition-transform duration-200 active:scale-[0.98]"
+            >
+              {isUpdating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+              Delete Group Permanently
+            </Button>
+          </div>
+        )}
+      </div>
+    </DialogContent>
+  );
+}
+
 function GroupChatArea({ group, currentUser, onBack }: { group: Group; currentUser: User; onBack?: () => void }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
@@ -853,6 +1106,23 @@ function GroupChatArea({ group, currentUser, onBack }: { group: Group; currentUs
             </div>
           </div>
         </div>
+        
+        <Dialog>
+          <DialogTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-primary hover:bg-primary/10 rounded-full h-10 w-10 transition-all"
+            >
+              <Info className="h-5 w-5" />
+            </Button>
+          </DialogTrigger>
+          <GroupSettingsDialog 
+            group={group} 
+            currentUser={currentUser} 
+            onDeleteSuccess={onBack}
+          />
+        </Dialog>
       </div>
 
       <ScrollArea ref={scrollRef} className="flex-1 p-4">

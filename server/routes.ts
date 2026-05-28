@@ -92,6 +92,29 @@ setupAuth(app);
     res.json(groups);
   });
 
+  app.patch("/api/groups/:groupId", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    try {
+      const { name } = req.body;
+      if (!name || name.trim() === "") {
+        return res.status(400).json({ message: "Group name is required" });
+      }
+
+      const group = await storage.getGroup(req.params.groupId);
+      if (!group) return res.sendStatus(404);
+
+      if (group.adminId !== req.user!.id) {
+        return res.status(403).json({ message: "Only the group owner can edit settings" });
+      }
+
+      const updatedGroup = await storage.updateGroup(req.params.groupId, { name });
+      res.json(updatedGroup);
+    } catch (error) {
+      console.error("Group settings update error:", error);
+      res.status(500).json({ message: "Failed to update group settings" });
+    }
+  });
+
   app.get("/api/groups/:groupId", async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
     const group = await storage.getGroup(req.params.groupId);

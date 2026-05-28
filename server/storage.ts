@@ -18,6 +18,7 @@ export interface IStorage {
   createGroup(name: string, adminId: string, memberIds: string[]): Promise<GroupType>;
   getGroup(id: string): Promise<GroupType | undefined>;
   getUserGroups(userId: string): Promise<GroupType[]>;
+  updateGroup(id: string, updates: Partial<Omit<GroupType, "id">>): Promise<GroupType>;
   addGroupMembers(groupId: string, memberIds: string[]): Promise<void>;
   removeGroupMember(groupId: string, memberId: string): Promise<void>;
   getGroupMessages(groupId: string): Promise<MessageType[]>;
@@ -170,6 +171,21 @@ export class MongoStorage implements IStorage {
     }
     await Message.deleteMany({ groupId });
     await Group.findByIdAndDelete(groupId);
+  }
+
+  async updateGroup(id: string, updates: Partial<Omit<GroupType, "id">>): Promise<GroupType> {
+    const updateData: any = {};
+    if (updates.name !== undefined) updateData.name = updates.name;
+
+    const group = await Group.findByIdAndUpdate(
+      id,
+      { $set: updateData },
+      { new: true }
+    );
+    if (!group) {
+      throw new Error("Group not found");
+    }
+    return this.transformGroup(group);
   }
 
   private transformUser(user: any): UserType {
