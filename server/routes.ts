@@ -9,6 +9,14 @@ import path from "path";
 import fs from "fs";
 import express from "express";
 import { fileURLToPath } from "url";
+import { v2 as cloudinary } from "cloudinary";
+
+// Configure Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -202,12 +210,27 @@ setupAuth(app);
     if (!req.isAuthenticated()) return res.sendStatus(401);
     if (!req.file) return res.status(400).json({ message: "No file uploaded" });
 
-    const fileUrl = `/uploads/${req.file.filename}`;
-    res.json({
-      fileUrl,
-      fileName: req.file.originalname,
-      fileType: req.file.mimetype
-    });
+    try {
+      // Upload the local temp file to Cloudinary
+      const result = await cloudinary.uploader.upload(req.file.path, {
+        folder: "quicktalk_uploads",
+        resource_type: "auto",
+      });
+
+      // Safely delete the temporary local file
+      fs.unlink(req.file.path, (err) => {
+        if (err) console.error("Temp file deletion error:", err);
+      });
+
+      res.json({
+        fileUrl: result.secure_url,
+        fileName: req.file.originalname,
+        fileType: req.file.mimetype
+      });
+    } catch (error) {
+      console.error("Cloudinary upload error:", error);
+      res.status(500).json({ message: "Failed to upload file to Cloudinary" });
+    }
   });
 
   app.delete("/api/messages/:messageId", async (req, res) => {

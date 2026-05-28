@@ -132,7 +132,7 @@ export class MongoStorage implements IStorage {
     const group = await Group.create({
       name,
       admin: adminId,
-      members: [...new Set([adminId, ...memberIds])]
+      members: Array.from(new Set([adminId, ...memberIds]))
     });
     return this.transformGroup(group);
   }

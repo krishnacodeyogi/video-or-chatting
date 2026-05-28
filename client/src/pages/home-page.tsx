@@ -625,14 +625,14 @@ function ChatArea({ selectedUser, currentUser, onStartCall, onBack }: { selected
                             <DialogTrigger>
                               <img
                                 src={message.fileUrl}
-                                alt={message.fileName}
+                                alt={message.fileName || undefined}
                                 className="max-w-full h-auto rounded cursor-pointer"
                               />
                             </DialogTrigger>
                             <DialogContent className="max-w-screen-lg">
                               <img
                                 src={message.fileUrl}
-                                alt={message.fileName}
+                                alt={message.fileName || undefined}
                                 className="max-w-full h-auto"
                               />
                             </DialogContent>
@@ -1164,14 +1164,14 @@ function GroupChatArea({ group, currentUser, onBack }: { group: Group; currentUs
                             <DialogTrigger>
                               <img
                                 src={message.fileUrl}
-                                alt={message.fileName}
+                                alt={message.fileName || undefined}
                                 className="max-w-full h-auto rounded cursor-pointer"
                               />
                             </DialogTrigger>
                             <DialogContent className="max-w-screen-lg">
                               <img
                                 src={message.fileUrl}
-                                alt={message.fileName}
+                                alt={message.fileName || undefined}
                                 className="max-w-full h-auto"
                               />
                             </DialogContent>
