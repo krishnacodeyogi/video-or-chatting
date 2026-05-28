@@ -8,11 +8,15 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import express from "express";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Configure multer for file uploads
 const upload = multer({
   storage: multer.diskStorage({
-    destination: './uploads/',
+    destination: path.resolve(__dirname, '../uploads'),
     filename: (req, file, cb) => {
       cb(null, Date.now() + path.extname(file.originalname));
     }
@@ -23,8 +27,9 @@ const upload = multer({
 });
 
 // Ensure uploads directory exists
-if (!fs.existsSync('./uploads')) {
-  fs.mkdirSync('./uploads');
+const uploadsDir = path.resolve(__dirname, '../uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
  
@@ -244,7 +249,7 @@ setupAuth(app);
   });
 
   // Serve uploaded files
-  app.use('/uploads', express.static('uploads'));
+  app.use('/uploads', express.static(path.resolve(__dirname, '../uploads')));
 
   const httpServer = createServer(app);
   return httpServer;

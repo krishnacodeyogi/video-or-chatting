@@ -48,6 +48,10 @@ export function VideoCall({
     callerAvatarUrl?: string;
     callType: "video" | "voice";
   } | null>(null);
+  const [callPeer, setCallPeer] = useState<{
+    username: string;
+    avatarUrl: string | null;
+  } | null>(null);
 
   // Callback refs to robustly bind media streams when conditional elements mount
   const localVideoCallback = React.useCallback(
@@ -179,6 +183,10 @@ export function VideoCall({
       setCallState("incoming");
       onCallActiveChange(true);
       startRingtone(true);
+      setCallPeer({
+        username: data.callerName,
+        avatarUrl: data.callerAvatarUrl || null,
+      });
     });
 
     // Handle Call Answered
@@ -321,6 +329,10 @@ export function VideoCall({
     setCallState("calling");
     onCallActiveChange(true);
     startRingtone(false);
+    setCallPeer({
+      username: selectedUsername,
+      avatarUrl: selectedUserAvatarUrl,
+    });
 
     try {
       const stream = await startLocalStream(type);
@@ -421,6 +433,7 @@ export function VideoCall({
     setLocalStream(null);
     setRemoteStream(null);
     setIncomingCallData(null);
+    setCallPeer(null);
     activePeerIdRef.current = null;
     pendingCandidatesRef.current = [];
     onCallActiveChange(false);
@@ -609,15 +622,15 @@ export function VideoCall({
                       {!remoteStream && (
                         <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950 gap-4 text-white">
                           <Avatar className="h-20 w-20 animate-pulse">
-                            {(selectedUserAvatarUrl || incomingCallData?.callerAvatarUrl) && (
+                            {callPeer?.avatarUrl && (
                               <AvatarImage 
-                                src={selectedUserAvatarUrl || incomingCallData?.callerAvatarUrl || ""} 
-                                alt={selectedUsername || incomingCallData?.callerName || ""} 
+                                src={callPeer.avatarUrl} 
+                                alt={callPeer.username} 
                                 className="object-cover" 
                               />
                             )}
                             <AvatarFallback className="text-2xl">
-                              {selectedUsername?.[0].toUpperCase() || incomingCallData?.callerName?.[0].toUpperCase()}
+                              {callPeer?.username?.[0].toUpperCase()}
                             </AvatarFallback>
                           </Avatar>
                           <p className="text-slate-400 animate-pulse">Connecting to video feed...</p>
@@ -655,21 +668,21 @@ export function VideoCall({
                       <div className="absolute inset-0 bg-green-500/20 rounded-full animate-ping scale-[1.5]"></div>
                       <div className="absolute inset-0 bg-green-500/10 rounded-full animate-pulse scale-[2]"></div>
                       <Avatar className="h-40 w-40 border-4 border-green-500/50 shadow-2xl relative z-10">
-                        {(selectedUserAvatarUrl || incomingCallData?.callerAvatarUrl) && (
+                        {callPeer?.avatarUrl && (
                           <AvatarImage 
-                            src={selectedUserAvatarUrl || incomingCallData?.callerAvatarUrl || ""} 
-                            alt={selectedUsername || incomingCallData?.callerName || ""} 
+                            src={callPeer.avatarUrl} 
+                            alt={callPeer.username} 
                             className="object-cover" 
                           />
                         )}
                         <AvatarFallback className="text-6xl bg-slate-800 text-white font-bold">
-                          {selectedUsername?.[0].toUpperCase() || incomingCallData?.callerName?.[0].toUpperCase()}
+                          {callPeer?.username?.[0].toUpperCase()}
                         </AvatarFallback>
                       </Avatar>
                     </div>
                     <div className="text-center z-10">
                       <h2 className="text-3xl font-bold text-white mb-2">
-                        {selectedUsername || incomingCallData?.callerName}
+                        {callPeer?.username}
                       </h2>
                       <div className="flex items-center justify-center gap-2 text-green-400 font-medium text-lg">
                         <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
