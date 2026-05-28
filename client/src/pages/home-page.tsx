@@ -733,6 +733,11 @@ function GroupChatArea({ group, currentUser, onBack }: { group: Group; currentUs
   const scrollRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
+  const { data: allUsers = [] } = useQuery<User[]>({
+    queryKey: ["/api/users"],
+    refetchInterval: false,
+  });
+
   const { data: messages = [] } = useQuery<Message[]>({
     queryKey: ["/api/messages", group.id],
     queryFn: async () => {
@@ -836,8 +841,10 @@ function GroupChatArea({ group, currentUser, onBack }: { group: Group; currentUs
               <ArrowLeft className="h-5 w-5" />
             </Button>
           )}
-          <Avatar>
-            <AvatarFallback><Users className="h-5 w-5" /></AvatarFallback>
+          <Avatar className="h-10 w-10 border border-primary/10 shadow-sm">
+            <AvatarFallback className="bg-gradient-to-tr from-primary to-emerald-500 text-white">
+              <Users className="h-5 w-5" />
+            </AvatarFallback>
           </Avatar>
           <div>
             <div className="font-semibold">{group.name}</div>
@@ -850,27 +857,36 @@ function GroupChatArea({ group, currentUser, onBack }: { group: Group; currentUs
 
       <ScrollArea ref={scrollRef} className="flex-1 p-4">
         <div className="space-y-4">
-          {messages.map((message) => (
-            <div
-              key={message.id}
-              className={cn(
-                "flex",
-                message.senderId === currentUser.id ? "justify-end" : "justify-start"
-              )}
-            >
-              <Card
+          {messages.map((message) => {
+            const sender = allUsers.find((u) => u.id === message.senderId);
+            const senderName = sender ? (sender.displayName || sender.username) : "Unknown User";
+
+            return (
+              <div
+                key={message.id}
                 className={cn(
-                  "max-w-[70%] px-4 py-2.5 relative group shadow-[0_2px_8px_rgba(0,0,0,0.03)] border-0",
-                  message.senderId === currentUser.id
-                    ? "bg-gradient-to-tr from-primary to-emerald-600 text-primary-foreground rounded-2xl rounded-br-sm font-medium"
-                    : "bg-muted/70 hover:bg-muted text-foreground rounded-2xl rounded-bl-sm font-medium border border-border/10"
+                  "flex",
+                  message.senderId === currentUser.id ? "justify-end" : "justify-start"
                 )}
               >
-                {message.isDeleted ? (
-                  <span className="italic text-muted-foreground">This message was deleted</span>
-                ) : (
-                  <>
-                    {message.content}
+                <Card
+                  className={cn(
+                    "max-w-[70%] px-4 py-2.5 relative group shadow-[0_2px_8px_rgba(0,0,0,0.03)] border-0",
+                    message.senderId === currentUser.id
+                      ? "bg-gradient-to-tr from-primary to-emerald-600 text-primary-foreground rounded-2xl rounded-br-sm font-medium"
+                      : "bg-muted/70 hover:bg-muted text-foreground rounded-2xl rounded-bl-sm font-medium border border-border/10"
+                  )}
+                >
+                  {message.isDeleted ? (
+                    <span className="italic text-muted-foreground">This message was deleted</span>
+                  ) : (
+                    <>
+                      {message.senderId !== currentUser.id && (
+                        <span className="block text-[10px] font-bold text-primary mb-1 select-none">
+                          {senderName}
+                        </span>
+                      )}
+                      {message.content}
                     {message.fileUrl && (
                       <div className="mt-2">
                         {message.fileType?.startsWith('image/') ? (
@@ -921,7 +937,8 @@ function GroupChatArea({ group, currentUser, onBack }: { group: Group; currentUs
                 )}
               </Card>
             </div>
-          ))}
+          );
+        })}
         </div>
       </ScrollArea>
 
@@ -1165,8 +1182,10 @@ export default function HomePage() {
                     selectedGroup?.id === group.id && "bg-accent/80 border-border/30 shadow-[0_2px_8px_rgba(0,0,0,0.02)]"
                   )}
                 >
-                  <Avatar>
-                    <AvatarFallback><Users className="h-5 w-5" /></AvatarFallback>
+                  <Avatar className="h-10 w-10 border border-primary/10">
+                    <AvatarFallback className="bg-gradient-to-tr from-primary to-emerald-500 text-white">
+                      <Users className="h-5 w-5" />
+                    </AvatarFallback>
                   </Avatar>
                   <div className="flex-1 text-left">
                     <div className="font-medium">{group.name}</div>
