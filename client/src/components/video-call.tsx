@@ -285,10 +285,20 @@ export function VideoCall({
   // Handle local camera and microphone stream
   const startLocalStream = async (type: "video" | "voice") => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: type === "video",
-        audio: true,
-      });
+      const constraints = {
+        video: type === "video" ? {
+          width: { min: 640, ideal: 1280, max: 1920 },
+          height: { min: 480, ideal: 720, max: 1080 },
+          frameRate: { ideal: 30, max: 60 },
+          facingMode: "user"
+        } : false,
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        }
+      };
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
       setLocalStream(stream);
       return stream;
     } catch (err) {
