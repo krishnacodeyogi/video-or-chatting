@@ -1,4 +1,4 @@
-import { type User as UserType, type Message as MessageType, type Group as GroupType } from "@shared/schema";
+import { type User as UserType, type Message as MessageType, type Group as GroupType } from "../shared/schema";
 import session from "express-session";
 import MongoStore from "connect-mongo";
 import { User, Message, Group } from './db';

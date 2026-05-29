@@ -2,13 +2,10 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { setupAuth, hashPassword } from "./auth";
 import { storage } from "./storage";
-import { insertMessageSchema, insertGroupSchema } from "@shared/schema";
+import { insertMessageSchema, insertGroupSchema } from "../shared/schema";
 import { z } from "zod";
 import multer from "multer";
 import path from "path";
-import fs from "fs";
-import express from "express";
-import { fileURLToPath } from "url";
 import { v2 as cloudinary } from "cloudinary";
 
 // Configure Cloudinary
@@ -18,29 +15,16 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Configure multer for file uploads
+// Keep uploads in memory and stream straight to Cloudinary so the server is
+// stateless and works on read-only / serverless filesystems (e.g. Vercel).
 const upload = multer({
-  storage: multer.diskStorage({
-    destination: path.resolve(__dirname, '../uploads'),
-    filename: (req, file, cb) => {
-      cb(null, Date.now() + path.extname(file.originalname));
-    }
-  }),
+  storage: multer.memoryStorage(),
   limits: {
-    fileSize: 5 * 1024 * 1024 // 5MB limit
-  }
+    fileSize: 5 * 1024 * 1024, // 5MB limit
+  },
 });
 
-// Ensure uploads directory exists
-const uploadsDir = path.resolve(__dirname, '../uploads');
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
 
- 
 export async function registerRoutes(app: Express): Promise<Server> {
    
 
@@ -211,15 +195,16 @@ setupAuth(app);
     if (!req.file) return res.status(400).json({ message: "No file uploaded" });
 
     try {
-      // Upload the local temp file to Cloudinary
-      const result = await cloudinary.uploader.upload(req.file.path, {
-        folder: "quicktalk_uploads",
-        resource_type: "auto",
-      });
-
-      // Safely delete the temporary local file
-      fs.unlink(req.file.path, (err) => {
-        if (err) console.error("Temp file deletion error:", err);
+      // Stream the in-memory buffer straight to Cloudinary (no local disk).
+      const result = await new Promise<any>((resolve, reject) => {
+        const stream = cloudinary.uploader.upload_stream(
+          { folder: "quicktalk_uploads", resource_type: "auto" },
+          (error, uploaded) => {
+            if (error || !uploaded) return reject(error);
+            resolve(uploaded);
+          }
+        );
+        stream.end(req.file!.buffer);
       });
 
       res.json({
@@ -295,9 +280,6 @@ setupAuth(app);
       res.status(500).json({ message: "Failed to set offline status" });
     }
   });
-
-  // Serve uploaded files
-  app.use('/uploads', express.static(path.resolve(__dirname, '../uploads')));
 
   const httpServer = createServer(app);
   return httpServer;
