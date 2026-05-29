@@ -1,6 +1,4 @@
 import express from "express";
-import mongoose from "mongoose";
-import { registerRoutes } from "../server/routes";
 
 // Vercel serverless entry. Exposes the REST API only (auth, users, messages,
 // groups, Cloudinary upload). Messaging uses the same 3s polling as the web
@@ -24,9 +22,28 @@ let initPromise: Promise<void> | null = null;
 async function init(): Promise<void> {
   if (!initPromise) {
     initPromise = (async () => {
+      // Validate env up front so the error message is obvious.
+      const required = [
+        "MONGODB_URI",
+        "SESSION_SECRET",
+        "CLOUDINARY_CLOUD_NAME",
+        "CLOUDINARY_API_KEY",
+        "CLOUDINARY_API_SECRET",
+      ];
+      const missing = required.filter((k) => !process.env[k]);
+      if (missing.length) {
+        throw new Error(
+          `Missing environment variables on Vercel: ${missing.join(", ")}`,
+        );
+      }
+
+      // Imported dynamically so any load-time error (e.g. DB/session setup)
+      // is caught below and surfaced in the response instead of a blank 500.
+      const mongoose = (await import("mongoose")).default;
       if (mongoose.connection.readyState === 0) {
         await mongoose.connect(process.env.MONGODB_URI as string);
       }
+      const { registerRoutes } = await import("../server/routes");
       await registerRoutes(app);
     })();
   }
@@ -34,6 +51,23 @@ async function init(): Promise<void> {
 }
 
 export default async function handler(req: any, res: any) {
-  await init();
+  try {
+    await init();
+  } catch (err: any) {
+    // Reset so the next request can retry, and surface the real cause.
+    initPromise = null;
+    // eslint-disable-next-line no-console
+    console.error("INIT_FAILED", err);
+    res.statusCode = 500;
+    res.setHeader("content-type", "application/json");
+    res.end(
+      JSON.stringify({
+        error: "init_failed",
+        message: String(err?.message ?? err),
+        stack: err?.stack,
+      }),
+    );
+    return;
+  }
   return (app as unknown as (req: any, res: any) => void)(req, res);
 }
