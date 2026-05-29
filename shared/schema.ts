@@ -57,5 +57,10 @@ export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type Message = typeof messages.$inferSelect;
 export type InsertMessage = z.infer<typeof insertMessageSchema>;
-export type Group = typeof groups.$inferSelect & { memberIds: string[] };
+export type Group = typeof groups.$inferSelect & { 
+  memberIds: string[];
+  adminIds: string[];
+  onlyAdminsCanEditInfo: boolean;
+  onlyAdminsCanSendMessages: boolean;
+};
 export type InsertGroup = z.infer<typeof insertGroupSchema>;

@@ -1,15 +1,19 @@
 import express from "express";
+import mongoose from "mongoose";
+import { registerRoutes } from "./routes";
 
-// Vercel serverless entry. Exposes the REST API only (auth, users, messages,
-// groups, Cloudinary upload). Messaging uses the same 3s polling as the web
-// client, which works fine on serverless.
+// Source for the Vercel serverless function. This is bundled by esbuild into
+// `api/index.js` (a single self-contained ESM file) so the runtime never has
+// to resolve local TypeScript files — which @vercel/node does not handle
+// reliably in this ESM project.
 //
-// NOT included here: Socket.IO signaling (video/voice calls + live presence),
-// because Vercel serverless functions cannot hold persistent connections. Run
-// the full Node server (server/index.ts) on a persistent host (e.g. Render,
-// see render.yaml) and point the app's SOCKET_URL at it for calls.
+// Build:  npm run build:api   (esbuild ... --outfile=api/index.js)
 //
-// Required environment variables on Vercel:
+// REST API only (auth, users, messages, groups, Cloudinary upload). Socket.IO
+// signaling (calls + live presence) is NOT here — it needs a persistent host
+// such as Render (see render.yaml).
+//
+// Required env vars on Vercel:
 //   MONGODB_URI, SESSION_SECRET, CLOUDINARY_CLOUD_NAME,
 //   CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET
 
@@ -22,7 +26,6 @@ let initPromise: Promise<void> | null = null;
 async function init(): Promise<void> {
   if (!initPromise) {
     initPromise = (async () => {
-      // Validate env up front so the error message is obvious.
       const required = [
         "MONGODB_URI",
         "SESSION_SECRET",
@@ -36,14 +39,9 @@ async function init(): Promise<void> {
           `Missing environment variables on Vercel: ${missing.join(", ")}`,
         );
       }
-
-      // Imported dynamically so any load-time error (e.g. DB/session setup)
-      // is caught below and surfaced in the response instead of a blank 500.
-      const mongoose = (await import("mongoose")).default;
       if (mongoose.connection.readyState === 0) {
         await mongoose.connect(process.env.MONGODB_URI as string);
       }
-      const { registerRoutes } = await import("../server/routes");
       await registerRoutes(app);
     })();
   }
@@ -54,7 +52,6 @@ export default async function handler(req: any, res: any) {
   try {
     await init();
   } catch (err: any) {
-    // Reset so the next request can retry, and surface the real cause.
     initPromise = null;
     // eslint-disable-next-line no-console
     console.error("INIT_FAILED", err);

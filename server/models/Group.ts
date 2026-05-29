@@ -14,6 +14,18 @@ const groupSchema = new mongoose.Schema({
     ref: 'User',
     required: true 
   },
+  admins: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  }],
+  onlyAdminsCanEditInfo: {
+    type: Boolean,
+    default: false
+  },
+  onlyAdminsCanSendMessages: {
+    type: Boolean,
+    default: false
+  },
   createdAt: { 
     type: Date, 
     default: Date.now 

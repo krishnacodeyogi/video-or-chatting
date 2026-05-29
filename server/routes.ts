@@ -95,8 +95,14 @@ setupAuth(app);
       const group = await storage.getGroup(req.params.groupId);
       if (!group) return res.sendStatus(404);
 
-      if (group.adminId !== req.user!.id) {
-        return res.status(403).json({ message: "Only the group owner can edit settings" });
+      const isMember = group.memberIds.includes(req.user!.id);
+      if (!isMember) {
+        return res.status(403).json({ message: "You are not a member of this group" });
+      }
+
+      const isAdmin = group.adminIds.includes(req.user!.id);
+      if (group.onlyAdminsCanEditInfo && !isAdmin) {
+        return res.status(403).json({ message: "Only group admins can edit group settings" });
       }
 
       const updatedGroup = await storage.updateGroup(req.params.groupId, { name });
@@ -104,6 +110,81 @@ setupAuth(app);
     } catch (error) {
       console.error("Group settings update error:", error);
       res.status(500).json({ message: "Failed to update group settings" });
+    }
+  });
+
+  app.patch("/api/groups/:groupId/settings", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    try {
+      const { groupId } = req.params;
+      const { onlyAdminsCanEditInfo, onlyAdminsCanSendMessages } = req.body;
+      const group = await storage.getGroup(groupId);
+      if (!group) return res.sendStatus(404);
+
+      const isAdmin = group.adminIds.includes(req.user!.id);
+      if (!isAdmin) {
+        return res.status(403).json({ message: "Only group admins can manage settings" });
+      }
+
+      const updated = await storage.updateGroup(groupId, {
+        onlyAdminsCanEditInfo: onlyAdminsCanEditInfo !== undefined ? !!onlyAdminsCanEditInfo : group.onlyAdminsCanEditInfo,
+        onlyAdminsCanSendMessages: onlyAdminsCanSendMessages !== undefined ? !!onlyAdminsCanSendMessages : group.onlyAdminsCanSendMessages,
+      });
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Update group settings error:", error);
+      res.status(500).json({ message: "Failed to update settings" });
+    }
+  });
+
+  app.post("/api/groups/:groupId/admins", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    try {
+      const { groupId } = req.params;
+      const { userId } = req.body;
+      if (!userId) return res.status(400).json({ message: "userId is required" });
+
+      const group = await storage.getGroup(groupId);
+      if (!group) return res.sendStatus(404);
+
+      const isRequesterAdmin = group.adminIds.includes(req.user!.id);
+      if (!isRequesterAdmin) {
+        return res.status(403).json({ message: "Only group admins can promote members" });
+      }
+
+      if (!group.memberIds.includes(userId)) {
+        return res.status(400).json({ message: "User is not a member of this group" });
+      }
+
+      await storage.promoteToAdmin(groupId, userId);
+      res.sendStatus(200);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to promote member" });
+    }
+  });
+
+  app.delete("/api/groups/:groupId/admins/:userId", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    try {
+      const { groupId, userId } = req.params;
+      const group = await storage.getGroup(groupId);
+      if (!group) return res.sendStatus(404);
+
+      if (userId === group.adminId) {
+        return res.status(400).json({ message: "Cannot demote the primary group owner" });
+      }
+
+      const isRequesterOwner = group.adminId === req.user!.id;
+      const isSelfDemote = req.user!.id === userId;
+      if (!isRequesterOwner && !isSelfDemote) {
+        return res.status(403).json({ message: "Only the group owner can demote admins" });
+      }
+
+      await storage.demoteFromAdmin(groupId, userId);
+      res.sendStatus(200);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to demote member" });
     }
   });
 
@@ -123,6 +204,14 @@ setupAuth(app);
   app.post("/api/groups/:groupId/members", async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
     try {
+      const group = await storage.getGroup(req.params.groupId);
+      if (!group) return res.sendStatus(404);
+
+      const isAdmin = group.adminIds.includes(req.user!.id);
+      if (!isAdmin) {
+        return res.status(403).json({ message: "Only group admins can add members" });
+      }
+
       await storage.addGroupMembers(req.params.groupId, req.body.memberIds);
       res.sendStatus(200);
     } catch (error) {
@@ -133,7 +222,26 @@ setupAuth(app);
   app.delete("/api/groups/:groupId/members/:memberId", async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
     try {
-      await storage.removeGroupMember(req.params.groupId, req.params.memberId);
+      const { groupId, memberId } = req.params;
+      const group = await storage.getGroup(groupId);
+      if (!group) return res.sendStatus(404);
+
+      const isRequesterAdmin = group.adminIds.includes(req.user!.id);
+      if (!isRequesterAdmin) {
+        return res.status(403).json({ message: "Only group admins can remove members" });
+      }
+
+      if (memberId === group.adminId) {
+        return res.status(403).json({ message: "Cannot remove the group owner" });
+      }
+
+      const isTargetAdmin = group.adminIds.includes(memberId);
+      const isRequesterOwner = group.adminId === req.user!.id;
+      if (isTargetAdmin && !isRequesterOwner) {
+        return res.status(403).json({ message: "Only the group owner can remove other admins" });
+      }
+
+      await storage.removeGroupMember(groupId, memberId);
       res.sendStatus(200);
     } catch (error) {
       res.status(500).json({ message: "Failed to remove member" });
@@ -155,6 +263,22 @@ setupAuth(app);
 
     try {
       const data = insertMessageSchema.parse(req.body);
+
+      // Enforce admin-only message sending for restricted groups
+      if (data.groupId) {
+        const group = await storage.getGroup(data.groupId);
+        if (!group) return res.status(404).json({ message: "Group not found" });
+
+        if (!group.memberIds.includes(req.user!.id)) {
+          return res.status(403).json({ message: "You are not a member of this group" });
+        }
+
+        const isAdmin = group.adminIds.includes(req.user!.id);
+        if (group.onlyAdminsCanSendMessages && !isAdmin) {
+          return res.status(403).json({ message: "Only group admins can send messages in this group" });
+        }
+      }
+
       const message = await storage.createMessage({
         content: data.content,
         senderId: req.user!.id,

@@ -23,6 +23,8 @@ export interface IStorage {
   removeGroupMember(groupId: string, memberId: string): Promise<void>;
   getGroupMessages(groupId: string): Promise<MessageType[]>;
   deleteGroup(groupId: string, userId: string): Promise<void>;
+  promoteToAdmin(groupId: string, userId: string): Promise<void>;
+  demoteFromAdmin(groupId: string, userId: string): Promise<void>;
   sessionStore: session.Store;
 }
 
@@ -109,7 +111,23 @@ export class MongoStorage implements IStorage {
 
   async deleteMessage(messageId: string, userId: string): Promise<void> {
     const message = await Message.findById(messageId);
-    if (!message || message.senderId.toString() !== userId) {
+    if (!message) {
+      throw new Error("Message not found");
+    }
+    
+    let isAllowed = message.senderId.toString() === userId;
+    if (!isAllowed && message.groupId) {
+      const group = await Group.findById(message.groupId);
+      if (group) {
+        const adminId = group.admin.toString();
+        const groupAdmins = (group as any).admins ? (group as any).admins.map((a: any) => a.toString()) : [adminId];
+        if (adminId === userId || groupAdmins.includes(userId)) {
+          isAllowed = true;
+        }
+      }
+    }
+
+    if (!isAllowed) {
       throw new Error("Unauthorized to delete this message");
     }
     message.isDeleted = true;
@@ -132,6 +150,9 @@ export class MongoStorage implements IStorage {
     const group = await Group.create({
       name,
       admin: adminId,
+      admins: [adminId], // creator is the first admin
+      onlyAdminsCanEditInfo: false,
+      onlyAdminsCanSendMessages: false,
       members: Array.from(new Set([adminId, ...memberIds]))
     });
     return this.transformGroup(group);
@@ -155,7 +176,7 @@ export class MongoStorage implements IStorage {
 
   async removeGroupMember(groupId: string, memberId: string): Promise<void> {
     await Group.findByIdAndUpdate(groupId, {
-      $pull: { members: memberId }
+      $pull: { members: memberId, admins: memberId }
     });
   }
 
@@ -173,9 +194,23 @@ export class MongoStorage implements IStorage {
     await Group.findByIdAndDelete(groupId);
   }
 
+  async promoteToAdmin(groupId: string, userId: string): Promise<void> {
+    await Group.findByIdAndUpdate(groupId, {
+      $addToSet: { admins: userId }
+    });
+  }
+
+  async demoteFromAdmin(groupId: string, userId: string): Promise<void> {
+    await Group.findByIdAndUpdate(groupId, {
+      $pull: { admins: userId }
+    });
+  }
+
   async updateGroup(id: string, updates: Partial<Omit<GroupType, "id">>): Promise<GroupType> {
     const updateData: any = {};
     if (updates.name !== undefined) updateData.name = updates.name;
+    if (updates.onlyAdminsCanEditInfo !== undefined) updateData.onlyAdminsCanEditInfo = updates.onlyAdminsCanEditInfo;
+    if (updates.onlyAdminsCanSendMessages !== undefined) updateData.onlyAdminsCanSendMessages = updates.onlyAdminsCanSendMessages;
 
     const group = await Group.findByIdAndUpdate(
       id,
@@ -231,10 +266,20 @@ export class MongoStorage implements IStorage {
   }
 
   private transformGroup(group: any): GroupType {
+    const adminId = group.admin.toString();
+    const rawAdmins = group.admins || [];
+    const adminIdsList = rawAdmins.map((a: any) => a.toString());
+    if (!adminIdsList.includes(adminId)) {
+      adminIdsList.push(adminId);
+    }
+
     return {
       id: group._id.toString(),
       name: group.name,
-      adminId: group.admin.toString(),
+      adminId: adminId,
+      adminIds: adminIdsList,
+      onlyAdminsCanEditInfo: !!group.onlyAdminsCanEditInfo,
+      onlyAdminsCanSendMessages: !!group.onlyAdminsCanSendMessages,
       memberIds: group.members.map((m: any) => m._id.toString()),
       createdAt: group.createdAt
     };

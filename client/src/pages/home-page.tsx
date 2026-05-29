@@ -12,7 +12,7 @@ import { useEffect, useRef, useState } from "react";
 import { Form, FormControl, FormField, FormItem, FormLabel } from "@/components/ui/form";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
-import { LogOut, Send, Circle, Search, Moon, Sun, Trash2, Info, Plus, Users, Video, Phone, Camera, Check, User as UserIcon, ArrowLeft, MessagesSquare, UserMinus } from "lucide-react";
+import { LogOut, Send, Circle, Search, Moon, Sun, Trash2, Info, Plus, Users, Video, Phone, Camera, Check, User as UserIcon, ArrowLeft, MessagesSquare, UserMinus, Lock, ShieldAlert, ShieldCheck } from "lucide-react";
 import { debounce } from "lodash";
 import { useToast } from "@/hooks/use-toast";
 import { Paperclip, X, Trash, Loader2 } from "lucide-react";
@@ -20,6 +20,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { z } from "zod";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { VideoCall } from "@/components/video-call";
+import { Switch } from "@/components/ui/switch";
 
 function UserProfileDialog({ user }: { user: User }) {
   return (
@@ -742,6 +743,8 @@ function GroupSettingsDialog({ group, currentUser, onDeleteSuccess }: { group: G
   });
 
   const isOwner = group.adminId === currentUser.id;
+  const isAdmin = group.adminIds?.includes(currentUser.id) || isOwner;
+  const canEditInfo = !group.onlyAdminsCanEditInfo || isAdmin;
 
   const handleUpdateName = async () => {
     if (!groupName.trim()) return;
@@ -832,6 +835,47 @@ function GroupSettingsDialog({ group, currentUser, onDeleteSuccess }: { group: G
     }
   };
 
+  const handlePromoteAdmin = async (memberId: string, memberUsername: string) => {
+    setIsUpdating(true);
+    try {
+      await apiRequest("POST", `/api/groups/${group.id}/admins`, { userId: memberId });
+      queryClient.invalidateQueries({ queryKey: ["/api/groups"] });
+      toast({
+        title: "Success",
+        description: `@${memberUsername} is now a Group Admin.`,
+      });
+    } catch (err: any) {
+      toast({
+        title: "Error",
+        description: err.message || "Failed to promote member.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleDemoteAdmin = async (memberId: string, memberUsername: string) => {
+    if (!window.confirm(`Are you sure you want to dismiss @${memberUsername} as Admin?`)) return;
+    setIsUpdating(true);
+    try {
+      await apiRequest("DELETE", `/api/groups/${group.id}/admins/${memberId}`);
+      queryClient.invalidateQueries({ queryKey: ["/api/groups"] });
+      toast({
+        title: "Success",
+        description: `@${memberUsername} was dismissed as Admin.`,
+      });
+    } catch (err: any) {
+      toast({
+        title: "Error",
+        description: err.message || "Failed to demote member.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   const handleDeleteGroup = async () => {
     if (!window.confirm("CRITICAL: Are you sure you want to delete this group? All messages will be permanently lost!")) return;
     setIsUpdating(true);
@@ -888,7 +932,7 @@ function GroupSettingsDialog({ group, currentUser, onDeleteSuccess }: { group: G
             ) : (
               <div className="flex items-center justify-center gap-1.5">
                 <h3 className="text-xl font-extrabold tracking-tight">{group.name}</h3>
-                {isOwner && (
+                {canEditInfo && (
                   <Button variant="link" className="p-0 h-auto text-xs text-primary font-semibold hover:underline" onClick={() => setIsEditingName(true)}>
                     Edit
                   </Button>
@@ -899,8 +943,75 @@ function GroupSettingsDialog({ group, currentUser, onDeleteSuccess }: { group: G
           </div>
         </div>
 
-        {/* Member addition panel (Owner only) */}
-        {isOwner && (
+        {/* Permissions Configuration (Admins/Owners only) */}
+        {isAdmin && (
+          <div className="space-y-3 border-b border-border/30 pb-4">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Group Permissions</h4>
+            <div className="flex flex-col gap-3.5 bg-muted/10 p-3.5 rounded-xl border border-border/40">
+              <div className="flex items-center justify-between">
+                <div className="flex flex-col text-left max-w-[75%]">
+                  <span className="text-sm font-semibold">Only admins can edit info</span>
+                  <span className="text-[11px] text-muted-foreground leading-tight">Controls who can change the group name</span>
+                </div>
+                <Switch
+                  checked={group.onlyAdminsCanEditInfo}
+                  disabled={isUpdating}
+                  onCheckedChange={async (checked) => {
+                    setIsUpdating(true);
+                    try {
+                      await apiRequest("PATCH", `/api/groups/${group.id}/settings`, { onlyAdminsCanEditInfo: checked });
+                      queryClient.invalidateQueries({ queryKey: ["/api/groups"] });
+                      toast({
+                        title: "Success",
+                        description: "Permissions updated successfully.",
+                      });
+                    } catch (err: any) {
+                      toast({
+                        title: "Error",
+                        description: err.message || "Failed to update permissions.",
+                        variant: "destructive",
+                      });
+                    } finally {
+                      setIsUpdating(false);
+                    }
+                  }}
+                />
+              </div>
+              <div className="flex items-center justify-between border-t border-border/10 pt-3">
+                <div className="flex flex-col text-left max-w-[75%]">
+                  <span className="text-sm font-semibold">Only admins can send messages</span>
+                  <span className="text-[11px] text-muted-foreground leading-tight">Controls who can post in this group</span>
+                </div>
+                <Switch
+                  checked={group.onlyAdminsCanSendMessages}
+                  disabled={isUpdating}
+                  onCheckedChange={async (checked) => {
+                    setIsUpdating(true);
+                    try {
+                      await apiRequest("PATCH", `/api/groups/${group.id}/settings`, { onlyAdminsCanSendMessages: checked });
+                      queryClient.invalidateQueries({ queryKey: ["/api/groups"] });
+                      toast({
+                        title: "Success",
+                        description: "Permissions updated successfully.",
+                      });
+                    } catch (err: any) {
+                      toast({
+                        title: "Error",
+                        description: err.message || "Failed to update permissions.",
+                        variant: "destructive",
+                      });
+                    } finally {
+                      setIsUpdating(false);
+                    }
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Member addition panel (Admins only) */}
+        {isAdmin && (
           <div className="space-y-2 border-b border-border/30 pb-4">
             <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Add Member by Username</h4>
             <div className="flex gap-2">
@@ -921,13 +1032,14 @@ function GroupSettingsDialog({ group, currentUser, onDeleteSuccess }: { group: G
         {/* Members List */}
         <div className="space-y-2">
           <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Group Members ({group.memberIds.length})</h4>
-          <ScrollArea className="h-[150px] border border-border/40 rounded-xl bg-muted/10 p-2.5">
+          <ScrollArea className="h-[180px] border border-border/40 rounded-xl bg-muted/10 p-2.5">
             <div className="space-y-1.5">
               {group.memberIds.map((memberId) => {
                 const member = allUsers.find(u => u.id === memberId || u.id === group.adminId);
                 if (!member) return null;
                 const name = member.displayName || member.username;
                 const isMemberOwner = member.id === group.adminId;
+                const isMemberAdmin = group.adminIds?.includes(member.id);
 
                 return (
                   <div key={member.id} className="flex items-center justify-between p-2 rounded-xl hover:bg-accent/40 transition-colors">
@@ -941,21 +1053,57 @@ function GroupSettingsDialog({ group, currentUser, onDeleteSuccess }: { group: G
                         <span className="text-[10px] text-muted-foreground font-medium mt-0.5">@{member.username}</span>
                       </div>
                     </div>
-                    {isMemberOwner ? (
-                      <span className="text-[9px] bg-primary/10 text-primary font-extrabold uppercase px-2 py-0.5 rounded-full border border-primary/20 select-none">Owner</span>
-                    ) : (
-                      isOwner && (
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          onClick={() => handleRemoveMember(member.id, member.username)}
-                          disabled={isUpdating}
-                          className="h-7 w-7 rounded-full text-destructive hover:bg-destructive/10 hover:text-destructive"
-                        >
-                          <UserMinus className="h-4 w-4" />
-                        </Button>
-                      )
-                    )}
+                    <div className="flex items-center gap-1.5">
+                      {isMemberOwner ? (
+                        <span className="text-[9px] bg-primary/10 text-primary font-extrabold uppercase px-2 py-0.5 rounded-full border border-primary/20 select-none">Owner</span>
+                      ) : isMemberAdmin ? (
+                        <span className="text-[9px] bg-emerald-500/10 text-emerald-600 font-extrabold uppercase px-2 py-0.5 rounded-full border border-emerald-500/20 select-none">Admin</span>
+                      ) : null}
+
+                      {!isMemberOwner && isAdmin && (
+                        <div className="flex gap-1">
+                          {/* Owner only can dismiss other admins */}
+                          {isMemberAdmin && isOwner && (
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              onClick={() => handleDemoteAdmin(member.id, member.username)}
+                              disabled={isUpdating}
+                              className="h-6 px-1.5 text-[10px] font-bold rounded-lg text-muted-foreground hover:bg-muted"
+                              title="Dismiss as Admin"
+                            >
+                              Dismiss Admin
+                            </Button>
+                          )}
+                          {/* Admins can promote regular members to admin */}
+                          {!isMemberAdmin && (
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              onClick={() => handlePromoteAdmin(member.id, member.username)}
+                              disabled={isUpdating}
+                              className="h-6 px-1.5 text-[10px] font-bold rounded-lg text-primary hover:bg-primary/10"
+                              title="Make Admin"
+                            >
+                              Make Admin
+                            </Button>
+                          )}
+                          {/* Remove member actions: Admins can remove regular members, Owners can remove any admin */}
+                          {(!isMemberAdmin || isOwner) && (
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              onClick={() => handleRemoveMember(member.id, member.username)}
+                              disabled={isUpdating}
+                              className="h-6 w-6 rounded-full text-destructive hover:bg-destructive/10 hover:text-destructive"
+                              title="Remove member"
+                            >
+                              <UserMinus className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 );
               })}
@@ -1080,6 +1228,10 @@ function GroupChatArea({ group, currentUser, onBack }: { group: Group; currentUs
     }
   }, [messages]);
 
+  const isOwner = group.adminId === currentUser.id;
+  const isAdmin = group.adminIds?.includes(currentUser.id) || isOwner;
+  const canSendMessage = !group.onlyAdminsCanSendMessages || isAdmin;
+
   return (
     <>
       <div className="p-4 border-b flex items-center justify-between bg-background/95 backdrop-blur-sm sticky top-0 z-10">
@@ -1157,112 +1309,119 @@ function GroupChatArea({ group, currentUser, onBack }: { group: Group; currentUs
                         </span>
                       )}
                       {message.content}
-                    {message.fileUrl && (
-                      <div className="mt-2">
-                        {message.fileType?.startsWith('image/') ? (
-                          <Dialog>
-                            <DialogTrigger>
-                              <img
-                                src={message.fileUrl}
-                                alt={message.fileName || undefined}
-                                className="max-w-full h-auto rounded cursor-pointer"
-                              />
-                            </DialogTrigger>
-                            <DialogContent className="max-w-screen-lg">
-                              <img
-                                src={message.fileUrl}
-                                alt={message.fileName || undefined}
-                                className="max-w-full h-auto"
-                              />
-                            </DialogContent>
-                          </Dialog>
-                        ) : (
-                          <a
-                            href={message.fileUrl}
-                            download={message.fileName}
-                            className="flex items-center gap-2 text-sm hover:underline"
-                          >
-                            <Paperclip className="h-4 w-4" />
-                            {message.fileName}
-                          </a>
-                        )}
-                      </div>
-                    )}
-                  </>
-                )}
-                {message.senderId === currentUser.id && !message.isDeleted && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="absolute -right-8 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      if (window.confirm('Are you sure you want to delete this message?')) {
-                        deleteMessageMutation.mutate(message.id);
-                      }
-                    }}
-                  >
-                    <Trash className="h-4 w-4 text-destructive" />
-                  </Button>
-                )}
-              </Card>
-            </div>
-          );
-        })}
+                      {message.fileUrl && (
+                        <div className="mt-2">
+                          {message.fileType?.startsWith('image/') ? (
+                            <Dialog>
+                              <DialogTrigger>
+                                <img
+                                  src={message.fileUrl}
+                                  alt={message.fileName || undefined}
+                                  className="max-w-full h-auto rounded cursor-pointer"
+                                />
+                              </DialogTrigger>
+                              <DialogContent className="max-w-screen-lg">
+                                <img
+                                  src={message.fileUrl}
+                                  alt={message.fileName || undefined}
+                                  className="max-w-full h-auto"
+                                />
+                              </DialogContent>
+                            </Dialog>
+                          ) : (
+                            <a
+                              href={message.fileUrl}
+                              download={message.fileName}
+                              className="flex items-center gap-2 text-sm hover:underline"
+                            >
+                              <Paperclip className="h-4 w-4" />
+                              {message.fileName}
+                            </a>
+                          )}
+                        </div>
+                      )}
+                    </>
+                  )}
+                  {(message.senderId === currentUser.id || isAdmin) && !message.isDeleted && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="absolute -right-8 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        if (window.confirm('Are you sure you want to delete this message?')) {
+                          deleteMessageMutation.mutate(message.id);
+                        }
+                      }}
+                    >
+                      <Trash className="h-4 w-4 text-destructive" />
+                    </Button>
+                  )}
+                </Card>
+              </div>
+            );
+          })}
         </div>
       </ScrollArea>
 
       <div className="p-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] border-t bg-background/95 backdrop-blur-sm">
-        <Form {...form}>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              const data = form.getValues();
-              if (data.content.trim()) {
-                messageMutation.mutate(data);
-              }
-            }}
-            className="flex gap-2"
-          >
-            <input
-              type="file"
-              ref={fileInputRef}
-              className="hidden"
-              onChange={(e) => {
+        {canSendMessage ? (
+          <Form {...form}>
+            <form
+              onSubmit={(e) => {
                 e.preventDefault();
-                const file = e.target.files?.[0];
-                if (file) {
-                  uploadFileMutation.mutate(file);
+                const data = form.getValues();
+                if (data.content.trim()) {
+                  messageMutation.mutate(data);
                 }
               }}
-            />
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              onClick={(e) => {
-                e.preventDefault();
-                fileInputRef.current?.click();
-              }}
+              className="flex gap-2"
             >
-              <Paperclip className="h-5 w-5" />
-            </Button>
-            <FormField
-              control={form.control}
-              name="content"
-              render={({ field }) => (
-                <FormItem className="flex-1">
-                  <FormControl>
-                    <Input placeholder="Type a message..." {...field} />
-                  </FormControl>
-                </FormItem>
-              )}
-            />
-            <Button type="submit" size="icon" disabled={messageMutation.isPending}>
-              <Send className="h-5 w-5" />
-            </Button>
-          </form>
-        </Form>
+              <input
+                type="file"
+                ref={fileInputRef}
+                className="hidden"
+                onChange={(e) => {
+                  e.preventDefault();
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    uploadFileMutation.mutate(file);
+                  }
+                }}
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={(e) => {
+                  e.preventDefault();
+                  fileInputRef.current?.click();
+                }}
+              >
+                <Paperclip className="h-5 w-5" />
+              </Button>
+              <FormField
+                control={form.control}
+                name="content"
+                render={({ field }) => (
+                  <FormItem className="flex-1">
+                    <FormControl>
+                      <Input placeholder="Type a message..." {...field} />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+              <Button type="submit" size="icon" disabled={messageMutation.isPending}>
+                <Send className="h-5 w-5" />
+              </Button>
+            </form>
+          </Form>
+        ) : (
+          <div className="flex items-center justify-center p-3.5 bg-muted/40 rounded-2xl border border-border/10 text-muted-foreground text-sm font-semibold select-none shadow-[inset_0_2px_4px_rgba(0,0,0,0.02)]">
+            <Lock className="h-4.5 w-4.5 mr-2 text-muted-foreground/60" />
+            Only admins can send messages in this group
+          </div>
+        )}
       </div>
     </>
   );
